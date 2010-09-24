@@ -1,0 +1,5 @@
+Import("env")
+lib = env.MyLibrary("serial", LIBS=["c", "lwip"])
+Return("lib")
+
+# vim:ft=python:

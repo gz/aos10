@@ -1,0 +1,3 @@
+SOURCES += $(addprefix kdb/arch/$(ARCH)/, prepost.cc frame.cc reg.cc)
+
+SOURCES +=	kdb/generic/linear_ptab_dump.cc

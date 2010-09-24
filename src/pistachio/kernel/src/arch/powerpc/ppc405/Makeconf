@@ -1,0 +1,1 @@
+SOURCES += $(addprefix src/arch/$(ARCH)/$(CPU)/, init.S)

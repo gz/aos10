@@ -1,0 +1,117 @@
+Proposal - KDB Redesign / Restructure (06/12/2005)
+
+  Authors:
+    * Carl van Schaik
+  Contributors:
+    * Alex Webster
+    * Thomas Sewell
+
+** Introduction **
+
+The Kernel Debugger (KDB) will be a configurable system that can be optionally
+included into the L4 kernel at compile time. It will provide a variety of
+services through a number of interfaces which aim to be useful for developers
+to aid debug and monitoring of systems.
+
+
+The KDB will comprise of three main sections:
+  * Interfaces
+  * Services
+  * Data-structures
+
+Each section will contain a number of modules which can be conditionally
+configured to be included in the kernel. Most modules will be independent
+of each other and should *not* be mutually exclusive.
+
+** Interfaces **
+
+Interfaces are defined as methods for inspecting, monitoring and modifying the
+state of data and control flow in the system. Interfaces can be interactive,
+remote control or under local application control.
+Not all interfaces will have the same functionality or usage, but no services
+shall preclude use by new interfaces.
+
+Typical examples of interfaces:
+  * GDB-remote - Gnu Debugger with gdb-remote protocol over serial.
+  * CDB - Command-line interactive Debugger.
+  * Application - Software interface provided by L4 for applications.
+  * External - Pseudo interface for external debuggers/monitoring.
+               eg: JTAG debuggers, ICE, etc
+  * Third-party...
+
+** Services **
+
+The KDB will provide a number of services which can optionally be included in
+the kernel and affect the features available to the interfaces.
+Services provide interface independent mechanisms for inspecting, monitoring
+and modifying system data and state.
+
+A number of services will be available:
+  * Tracing - Provides a mechanism to watch, enable and disable tracepoints
+        in the kernel. Traces may include events and full traces with data
+	as well as kernel printf data etc.
+  * Statistics - Provides a mechanism to collect statistics for various
+        kernel operations and state. eg
+	  * event counters
+	    - syscalls
+	    - tlb flushes
+	    - context switches
+	    - etc
+	  * memory usage
+	  * scheduling / cpu usage
+	  * 
+  * Debugging - Provides a mechanism for debugging kernel and application
+        code on the system. Features may include:
+	  * Breakpoints
+	  * Memory access / modification
+	  * Single stepping
+	  * Register access
+	  *
+
+** Data-structures **
+
+Data-structures are provided for KDB services and interfaces to use and store
+data.
+They are diverse in usage and structure.
+
+example:
+  * Thread lists
+  * Address space lists
+  * Statistics data
+  * Tracebuffers
+  *
+
+** High-level services **
+
+Many high level services can be built on top of this KDB api.
+
+  * Logging: eg. via application interface + tracing service
+  * Kernel debugger: gdb via gdb-stub + debugging service
+  * etc
+
+
+** Proposal - kdb restructure **
+
+L4/Kernel/src/...
+          include/...
+	  kdb/drivers/platform/...
+	      gdb/...
+	      cdb/api/...
+	          generic/...
+		  arch/...
+		  platform/...
+	      app/...  (application interface - syscall/shm)
+	      services/trace/...
+	               stats/...
+		       debug/...
+
+drivers - currently serial port / keyboard / vga etc
+
+** Notes **
+
+Things like printf need to be redirected to any active interface.
+  printf -----> GDB
+           \--> CDB
+	    \-> Trace
+
+  CDB will need its own cdb_printf if it wants to talk to its serial driver.

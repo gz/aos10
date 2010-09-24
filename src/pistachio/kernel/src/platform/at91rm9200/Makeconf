@@ -1,0 +1,1 @@
+SOURCES += $(addprefix src/platform/at91rm9200/, timer.cc irq.cc plat.cc )

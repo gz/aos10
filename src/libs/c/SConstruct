@@ -1,0 +1,88 @@
+Import("*")
+import os
+
+public_headers = ["#libs/c/include", "#libs/c/arch_include/%s" % env.arch]
+
+cppdefines = []
+files = []
+
+if "malloc_debug" in args and args["malloc_debug"] == "yes":
+    cppdefines.append("CONFIG_MALLOC_DEBUG")
+if "malloc_debug_internal" in args and args["malloc_debug_internal"] == "yes":
+    cppdefines.append("CONFIG_MALLOC_DEBUG_INTERNAL")
+if "malloc_instrument" in args and args["malloc_instrument"] == "yes":
+    cppdefines.append("CONFIG_MALLOC_INSTRUMENT")
+if "thread_safe" in args and args["thread_safe"] == "yes":
+    cppdefines.append("THREAD_SAFE")
+
+filesystem = "null"
+if "filesystem" in args:
+    filesystem = args["filesystem"]
+
+libs = []
+if args["system"] in ["l4_rootserver", "iguana_server"]:
+    cpppath = [env.libs["l4"][0]]
+    libs.append("l4")
+elif args["system"] == "iguana":
+    # FIXME: (benjl) Ouch, libiguana and libc are mutually
+    # dependant, I can't actually express this relationship
+    # so we have this hack here...
+    cpppath = [env.libs["l4"][0], "#libs/iguana/include"]
+    libs.append("mutex")
+elif args["system"] == "sos":
+    cpppath = [env.libs["l4"][0]]
+    libs.append("l4")
+elif args["system"] == "xen":
+    libs.append("xen")
+else:
+    cpppath = []
+   
+if env.arch == "alpha":
+    cpppath.append("#libs/l4/include")
+
+src = src_glob("src/*.c") + \
+      src_glob("src/fs-%s/*.c" % filesystem) + \
+      src_glob("src/sys-%s/*.c" % args["system"]) + \
+      src_glob("src/sys-%s/arch-%s/*.c" % (args["system"], env.arch)) + \
+      src_glob("src/arch-%s/*.S" % env.arch)
+
+if env.test_lib == 'c':
+    public_headers += ["#libs/c/test"]
+    src += src_glob("test/*.c")
+    src += src_glob("test/fs-%s/*.c" % filesystem)
+    env.add_files([File(x) for x in src_glob("test/fs-%s/data/*" % filesystem)])
+    cpppath += ["#libs/check/include"]
+    env["EXPECT_TEST_DATA"] = [("100%: Checks: \d+, Failures: 0, Errors: 0", None)]
+
+libc = env.StaticLibrary('c', src,
+                         CPPDEFINES=env["CPPDEFINES"] + cppdefines)
+libc = libc[0]
+
+if env["FLINT_RUN"]:
+    for each in libc.children():
+        if str(each).endswith(".o"):
+            if str(each.children()[0]).endswith(".c") or \
+                   str(each.children()[0]).endswith(".cc"):
+                env.AddPreAction(each, "$FLINTCOM")
+
+# Check architecture exists
+archs = [os.path.split(arch)[-1].split("-")[1] for arch in src_glob("crt/sys-%s/*" % args["system"])]
+arch = getattr(env.machine, "arch", None)
+
+if arch not in archs:
+    raise UserError, "architecture %s is not yet supported by libc. supported: %s" % (arch, archs)
+
+crt_check = [os.path.split(file)[-1] for file in src_glob("crt/sys-%s/arch-%s/*.S" % (args["system"], env.arch))]
+if "crt0.S" not in crt_check:
+    raise UserError, "libc: architecture %s has no crt/sys-%s/arch-%s/crt0.S" % (arch, args["system"], env.arch)
+
+crt = env.StaticObject(src_glob("crt/sys-%s/arch-%s/crt0.S" % (args["system"], env.arch)),
+                       ASFLAGS=env["CCFLAGS"])
+
+if args["system"] in ["l4_rootserver", "iguana"]:
+    Depends(crt, env.libs["l4"][1])
+if "thread_safe" in args and args["thread_safe"] == "yes":
+    Depends(crt, env.libs["mutex"][1])
+
+lib = (public_headers, libc, "#" + os.path.dirname(libc.path), crt, libs, files)
+Return("lib")

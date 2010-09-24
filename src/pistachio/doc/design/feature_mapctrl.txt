@@ -1,0 +1,324 @@
+PISTACHIO N2 API changes
+****** L4 Mapping/Address space model changes *****
+
+  20th December, 2005   (C) National ICT Australia
+   -- Alex Webster
+   -- Ben Leslie
+   -- Carl van Schaik
+
+1 - Abstract
+
+This document describes a replacement for Pistachio's (L4Ka::Pistachio
+and NICTA::Pistachio-embedded N1) recursive address space and mapping
+model.  It describes the API changes for the NICTA::Pistachio-embedded
+N2 API. This is followed by a description of implementation details.
+The NICTA::Pistachio-embedded N2 API Kernel Reference Manual contains
+these changes.
+
+2 - Rationale
+
+A number of issues with the N1 and L4Ka::v4 APIs have developed into
+requirements for the development of these API changes:
+
+*  Many embedded systems are by nature static: They do not dynamically
+  create or delete memory areas. Even systems which are not static,
+  do not typically run complex operating systems in which address
+  space's can be recursively unmapped.
+  Thus, the overhead of the mapping database in time and space is
+  considerably restrictive, and the cost-benefit ratio is very
+  poor.
+
+*  The mapping database, being recursive, has unbounded execution
+  time for Unmap operations. This directly conflicts with the goal
+  of a kernel that is real-time capable.
+  Although it is theoretically possible to implement preemption
+  in the mapping database, it is prohibitively expensive and
+  complex.
+
+*  The existing mapping database and IPC based mapping model, provides
+  applications with the flexibility to map pages to other threads.
+  In typical centralised control based systems, this is undesirable
+  and requires security mechanisms which conflict with open
+  communication models.
+  Secondly providing applications with direct mapping support gives
+  thread's the ability to corrupt data on CPUs with virtual-caches
+  with an OS which employ a single address space (SAS) model.
+
+*  Since mappings create page-table and mapping database entries
+  which consume memory, allowing applications to directly map
+  pages means that resource control becomes a problem and
+  forces inefficient resource control policies.
+
+*  The current mapping database model requires that operating systems
+  keep track of mappings and frame tables for applications they page.
+  The mapping database and page-tables in the kernel are private and
+  hence a duplication of information is required. This is restrictive
+  for cost-sensitive, small memory systems.
+
+2 - Requirements
+
+*  Design a model where kernel resources are controllable.
+
+*  Remove or reduce the need for duplicate data in the kernel and
+  operating system.
+
+*  Provide for backwards compatibility and reduce the impact on existing
+  operating system and application code.
+
+*  The new design should eliminate unbounded operations and provide
+  options for preempt-ability to further reduce microkernel latency.
+
+*  Design should allow for performance optimisation such as fastpath
+  code for common system call usage.
+
+3 - Design
+
+3.1 - API changes
+
+The following changes have been proposed:
+
+*  Remove the mapping database from the L4 microkernel.
+  The kernel will only maintain page-table for address spaces. These
+  address spaces will have no dependencies on each other.
+
+*  Restrict mapping operations to the root server.
+  A applications will need to request a mapping from the root server.
+  The root server will perform the mapping after appropriate access
+  control checks.
+
+*  Separate mapping operations from IPC.
+  A new system call, MapControl, will perform map operations.
+  This simplifies the kernel design, allows mapping operations to be
+  fastpathed.
+
+*  The concept of Grant will be removed.
+  MapControl specifies an address space on which to operate, other
+  address spaces are not affected. Grant semantics can be implemented
+  by mapping a page to address space A, then removing the mapping
+  from address space B, in separate MapControl calls.
+
+*  Unmap system call will be replaced with MapControl
+  Unmapping a page from an address space becomes restricted.
+  Unmapping is not recursive and acts only on the addressed
+  address space.
+
+*  MapControl will provide for modification as well a page-table
+  lookup.
+  MapControl will allow operating systems to reduce memory usage by
+  providing read/write access to the kernel page-tables.
+
+*  MemoryControl system call will be replaced by MapControl.
+  MapControl will support access to page attributes. L4 will provide
+  a common set of page attribute to simplify user code.
+
+*  Cache control will be implemented via virtualised instructions or
+  provided by architecture specific system calls.
+
+3.2 - Commentary
+
+Under the new API, only privileged tasks are able to cause kernel
+resources to be consumed, except in cases where floating point/vector
+registers have space allocated to save them lazily (This may be subject
+to a future API change). Thus the root server can manage resources
+and quotas can be implemented with some knowledge of the kernel
+page-table format.
+
+Backwards compatibility can be maintained by an equivalent MDB
+implemented at user-level and an appropriate version of libl4 which
+detects mapping operations. All new code and existing operating
+systems will however benefit from supporting the new API changes
+directly. The API changes should be supportable under future API
+changes.
+
+There are potential performance issues in restricting mappings and
+enforcing proxying requests to the root server. We feel however that
+the common case will be such that applications are paged directly by
+the root server and have no slowdown. Two tier mapping hierarchies may
+still see improvement due to the reduction in kernel complexity.
+
+The amount of time spent by the kernel in a blocked state will be more
+predictable due to removal of recursion.  Further more, since mapping
+is restricted, the root server can chose smaller map/unmap operations
+in order to minimise kernel time spent in blocked state.
+
+Separating mapping from IPC will make it easier for fastpath
+implementations of map.
+
+4 - Design
+
+4.1 - Architecture
+
+A new privileged syscall, MapControl will be added.  Similar to the
+V4/N1 Unmap and MemoryControl calls, MapControl will operate on
+parameters passed in message registers.  The MapControl syscall
+takes two arguments, a ThreadId which specifies the target address
+space and a control word which controls the MapControl behaviour.
+
+  Control word
+    +---+---+---------------+------+
+    | m | r |   undefined   |  n   |
+    +---+---+---------------+------+
+
+The control word has three fields:
+ m: Specifies that a map operation is to be performed. MapItems in
+    message registers contain the mapping information.
+ r: Specifies that a read operation is to be performed. Read results
+    are returned in message registers.
+ n: The highest numbered MapItem in the message registers. There are
+    n+1 MapItems.
+
+MapControl returns a result word specifying whether the operation
+succeeded or not.
+
+Mappings are be specified by a pair of MRs which create a MapItem
+structure. This structure is different to the MapItem structure in
+V4/N1 APIs where it was used in IPC based mapping.
+
+The low MR in a MapItem contains a physical-descriptor which
+indicates the physical address and page attributes to be used for the
+mapping. A set of common page attributes are defined which are
+uniform across all architectures. Machines with page attributes
+that are not covered by the common attributes will define their
+own encoding for these attributes.
+The high MR in a MapItem contains an flex-page encoding of the mapping
+in the virtual address space. It specifies the virtual address, mapping
+size and page permissions.
+
+If the 'm' flag in the control word is not set, MapItems are not
+mapped.
+
+  MapItem
+    +--------------+--------+------+
+    |     base     |  size  | drwx | MR(2n + 1)
+    +--------------+---+----+------+
+    |     phys         |    attr   | MR(2n)
+    +------------------+-----------+
+
+MapControl operates on one MapItem at a time, it first performs a
+read operation (if 'r' flag is set) and then a modify operation (if 'm'
+flag is set).
+The read operation reads the initial state of a mapping and writes
+back the data to the MapItems, the write-back occurs after the modify
+operation such that a mapping can be modified and the read returns the
+original state of the mapping.
+
+  Permissions-Descriptor
+    +-+--------------+------+------+
+    |d|    ~~~~~     | 0RWX | 0rwx | MR(2n + 1)
+    +-+--------------+------+------+
+
+A read operation overwrites the flex-pages with a permissions-descriptor
+and fills in the physical-descriptor.
+If a read operation uses a MapItem that covers multiple pages, no
+valid data can be returned in the physical-descriptor. The top bit
+in the permissions-descriptor is used to indicate whether the read mapping
+is distinct or not (specified as the 'd' flag). If a distinct page mapping
+is read, the d-flag is set, the physical-descriptor is updated, the
+RWX and rwx bits contain the reference bits and permission bits for the
+mapping respectively.  If the d-flag is clear, the mapping is not distinct,
+the physical-descriptor is undefined and the RWX and rwx bits contain the
+bitwise OR of the reference and permission bits of all pages covered by the
+MapItem.
+
+Pagefault delivery will continue to be IPC based and none of the V4/N1
+pagefault protocols will be modified. The kernel will send all
+pagefaults to the thread's pager.
+
+The concept of the Sigma0 address space which contained the root of
+the mapping database is removed. The root server is the only
+privileged server and controls mapping of physical memory through
+MapControl.
+
+Several parts of the V4/N1 API are removed or changed:
+ - Mappings via IPC is removed.
+ - In the N2 API, no typed items are implemented. The typed items
+   field in the IPC tag is not interpreted, but cleared by the kernel.
+ - Receive windows are not interpreted and no longer part of the UTCB.
+ - Unmap is removed.
+ - MemoryControl is removed.
+
+4.2 - SMP Considerations
+
+It is predicted that theses API changes will make it easier to produce
+an SMP safe version of the kernel.
+There are no longer inter-address-space dependencies in the kernel
+which means that per address space locking of page-tables is viable.
+
+4.3 - Implementation specifics
+
+The L4 kernel will map any page accessed directly be the root server
+into the server's address space with a 1:1 mapping. This facilitates
+a mechanism for the server to boot strap itself. The root server is
+free to use MapControl to map physical memory into its own address
+space with any hardware supported virtual->physical mapping.
+
+L4 defined page attributes:
+
+enum l4attrib_e {
+	l4mem_default'      = 0,    /* CPU specific optimimal/default page attributes (for code+data) */
+	l4mem_cached'       = 1,    /* Cached memory (CPU specific writeback/writethrough mode) */
+	l4mem_uncached'     = 2,    /* Uncached memory */
+	l4mem_writeback'    = 3,    /* Cached - write-back */
+	l4mem_writethrough' = 4,    /* Cached - write-through */
+	l4mem_coherent'     = 5,    /* Cached-coherent */
+	l4mem_io'   '       = 6,    /* Device memory */
+	l4mem_io_combined'  = 7,    /* Device buffer memory - write-combined */
+	/* Other numbers are CPU specific */
+};
+
+
+5 - User Interface
+5.1 - General
+
+MapControl is a privileged syscall, meaning only threads in the root
+server's address space are able to invoke it.  This means that
+applications which depend on L4's IPC based mapping and Unmap will
+need to be modified to contact a privileged thread in order to perform
+these operations.
+
+[ Pagers, hierarchy, diagram, etc. ]
+
+The kernel maintains a mapping hierarchy through the use of pagers.
+Note however that pagers may not be able map memory to their clients
+directly and may need to proxy the request to a root server thread.
+
+5.2 - Iguana
+
+The proposed changes should be transparent to most Iguana apps.  In
+most cases, memory is shared by copying of capabilities.  Only Iguana
+needs to be aware of how the mappings are set up.  An exception to
+this are external address spaces, which were previously paged using
+L4's mechanisms.  Because the pager of an EAS is not a privileged
+thread, it will need to call an Iguana method.
+
+[ More detail about new Iguana calls ]
+int eas_map(eas_ref_t eas, fpage_t fpage, uintptr_t snd_base);
+int eas_unmap(eas_ref_t eas, fpage_t fpage);
+
+
+6 - Memory And CPU Impacts
+
+6.1 - Memory
+
+Removing the mapping database will reduce kernel memory usage. The
+amount reduced depends on the system but should range between 15
+and 40% less kernel memory.
+Further optimisations on particular architectures page tables can
+lead to further reductions.
+
+6.2 - CPU Impacts
+
+The kernel latency will be more definable and controlled. Overall
+CPU usage for mapping is projected to be lower for the common
+case where applications are paged directly by the root server, such
+as in Iguana. Performance for software using multiple levels of
+hierarchy will be affected, but may be offset by gains in simplifying
+mapping operations in the kernel.
+
+7 - Testing
+
+To be determined.
+Most of the testing will be functional testing of the new API and
+its implementation. Further testing will benchmark the N2 and N1
+APIs to quantize performance.
+

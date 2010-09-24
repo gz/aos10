@@ -1,0 +1,8 @@
+Import("*")
+
+sources=Split("tty_test.c ttyout.c")
+obj = env.MyProgram("tty_test", sources, LIBS=["c", "l4"])
+
+Return("obj")
+
+# vim: set filetype=python:
