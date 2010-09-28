@@ -75,8 +75,8 @@ init_thread(void)
 
 #define TAG_SYSLAB(t)	((short) L4_Label(t) >> 4)
 
-/* FIXME: Use a better name! */
-#define SOS_SYSCALL0 0
+#define SOS_WRITE 0
+struct serial* ser;
 
 /*
   Syscall loop.
@@ -87,9 +87,7 @@ init_thread(void)
   It currently handles pagefaults, interrupts and special sigma0
   requests.
 */
-
-static __inline__ void 
-syscall_loop(void)
+static __inline__ void syscall_loop(void)
 {
     dprintf(3, "Entering %s\n", __FUNCTION__);
 
@@ -101,60 +99,82 @@ syscall_loop(void)
     L4_ThreadId_t tid = L4_nilthread;
 
     for (;;) {
-	L4_MsgTag_t tag;
-
-	// Wait for a message, sometimes sending a reply
-	if (!send)
-	    tag = L4_Wait(&tid); // Nothing to send, so we just wait
-	else
-	    tag = L4_ReplyWait(tid, &tid); // Reply to caller and wait for IPC
+		L4_MsgTag_t tag;
 	
-	if (L4_IpcFailed(tag)) {
-	    L4_Word_t ec = L4_ErrorCode();
-	    dprintf(0, "%s: IPC error\n", __FUNCTION__);
-	    sos_print_error(ec);
-	    assert( !(ec & 1) );	// Check for recieve error and bail
-	    send = 0;
-	    continue;
-	}
-
-	// At this point we have, probably, recieved an IPC
-	L4_MsgStore(tag, &msg); /* Get the tag */
-
-	dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__,
-	     L4_ThreadNo(tid), (int) TAG_SYSLAB(tag),
-	     (void *) L4_MsgWord(&msg, 0));
+		ser = serial_init();
 	
-	//
-	// Dispatch IPC according to protocol.
-	//
-	send = 1; /* In most cases we will want to send a reply */
-	switch (TAG_SYSLAB(tag)) {
-	case L4_PAGEFAULT:
-	    // A pagefault occured. Dispatch to the pager
-	    pager(tid, &msg);
-	    break;
+		// Wait for a message, sometimes sending a reply
+		if (!send)
+			tag = L4_Wait(&tid); // Nothing to send, so we just wait
+		else
+			tag = L4_ReplyWait(tid, &tid); // Reply to caller and wait for IPC
 
-	case L4_INTERRUPT:
-	    if (0)
-		; // Received an interrupt, you need to implement this side
-	    else
-		network_irq(&tid, &send);
-	    break;
+		if (L4_IpcFailed(tag)) {
+			L4_Word_t ec = L4_ErrorCode();
+			dprintf(0, "%s: IPC error\n", __FUNCTION__);
+			sos_print_error(ec);
+			assert( !(ec & 1) );	// Check for recieve error and bail
+			send = 0;
+			continue;
+		}
 
-	/* our system calls */	
-	case SOS_SYSCALL0:
-	    dprintf( 0, "syscall: thread made syscall 0!" );
-	    assert(!"FIXME: Implement me!");
-	    break;
+		// At this point we have, probably, recieved an IPC
+		L4_MsgStore(tag, &msg); /* Get the tag */
 
-	/* error? */
-	default:
-	    // Unknown system call, so we don't want to reply to this thread
-	    sos_print_l4memory(&msg, L4_UntypedWords(tag) * sizeof(uint32_t));
-	    send = 0;
-	    break;
-	}
+		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__,
+			 L4_ThreadNo(tid), (int) TAG_SYSLAB(tag),
+			 (void *) L4_MsgWord(&msg, 0));
+
+		//
+		// Dispatch IPC according to protocol.
+		//
+		send = 1; /* In most cases we will want to send a reply */
+		switch (TAG_SYSLAB(tag)) {
+			case L4_PAGEFAULT:
+				// A pagefault occured. Dispatch to the pager
+				pager(tid, &msg);
+			break;
+
+			case L4_INTERRUPT:
+				if (0); // Received an interrupt, you need to implement this side
+				else
+				network_irq(&tid, &send);
+			break;
+
+			/* our system calls */
+			case SOS_WRITE:
+			{
+				//dprintf(0, "received SOS_WRITE\n");
+				char* message_string = (char*)L4_MsgWord(&msg, 1);
+				int total_sent = 0;
+				int sent = 0;
+				int len = L4_MsgWord(&msg, 0);
+
+				do {
+					sent = serial_send(ser, message_string, len-total_sent);
+					message_string += sent;
+
+					total_sent += sent;
+
+					if(total_sent < len) {
+						dprintf(0, "SOS_WRITE: serial driver's internal buffer fills faster than it can actually output data");
+					}
+
+				// In case we send faster than our serial driver allows we
+				// retry until all data is sent.
+				} while(total_sent < len);
+
+				send = 0;
+				break;
+			}
+
+			/* error? */
+			default:
+				// Unknown system call, so we don't want to reply to this thread
+				sos_print_l4memory(&msg, L4_UntypedWords(tag) * sizeof(uint32_t));
+				send = 0;
+			break;
+		}
     }
 }
 

@@ -45,9 +45,15 @@ int main(void)
     
     myid = L4_Myself();
     do {
-	printf("task:\tHello world, I'm\t0x%lx!\n", L4_ThreadNo(myid));
-	thread_block();
-	// sleep(1);	// Implement this as a syscall
+		printf("task:\tHello world, I'm\t0x%lx!\n", L4_ThreadNo(myid));
+
+		sos_write("123456789012345\n", 0, 16, NULL);
+		sos_write("1234567890123456789\n", 0, 20, NULL);
+		sos_write("abcdefghijklmnop\n", 0, 17, NULL);
+		sos_write("abc\n", 0, 4, NULL);
+
+		thread_block();
+		// sleep(1);	// Implement this as a syscall
     } while(1);
     
     return 0;

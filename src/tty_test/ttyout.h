@@ -9,6 +9,8 @@
  */
 extern void ttyout_init(void);
 
+size_t dprint(const void *vData, size_t count);
+
 /* routines needed by the libs/c i.e. -lc implementation */
 
 /* Print to the proper console.  You will need to finish these implementations
