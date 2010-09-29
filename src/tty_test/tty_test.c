@@ -45,9 +45,10 @@ int main(void)
     
     myid = L4_Myself();
     do {
+		sos_write("1234", 0, 4, NULL);
+
 		printf("task:\tHello world, I'm\t0x%lx!\n", L4_ThreadNo(myid));
 
-		sos_write("123456789012345\n", 0, 16, NULL);
 		sos_write("1234567890123456789\n", 0, 20, NULL);
 		sos_write("abcdefghijklmnop\n", 0, 17, NULL);
 		sos_write("abc\n", 0, 4, NULL);

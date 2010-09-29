@@ -27,7 +27,6 @@
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 static L4_ThreadId_t sSystemId;
-static char write_buffer[MSG_MAX_SIZE];
 
 
 
@@ -38,44 +37,21 @@ void ttyout_init(void) {
 size_t sos_write(const void *vData, long int position, size_t count, void *handle)
 {
     //dprintf("Send message with: %s", (char*) vData);
+	L4_Word_t* bufferp = (L4_Word_t*) vData;
 
-    int not_sent_count = count;
-  	char* realdata = (char*) vData;
+	// prepare IPC message
+	L4_Msg_t msg;
+	L4_MsgTag_t tag;
+	L4_MsgClear(&msg);
 
-    while(not_sent_count > 0) {
+	// set string length
+	L4_MsgAppendWord(&msg, count); // 1st register length of the string
+	L4_MsgAppendWord(&msg, (L4_Word_t) bufferp); // 2nd register pointer to the memory location of the string
 
-        int to_send = min(MSG_MAX_SIZE, not_sent_count);
-
-        // fill up buffer
-        memcpy(write_buffer, realdata, to_send);
-        realdata += to_send;
-        char* bufferp = write_buffer;
-
-        // prepare IPC message
-        L4_Msg_t msg;
-        L4_MsgTag_t tag;
-        L4_MsgClear(&msg);
-
-        // set string length
-	    L4_MsgAppendWord(&msg, to_send);
-
-	    for(int offset = 0; offset < MSG_MAX_SIZE; offset += MSG_WORD_SIZE) {
-			
-			// TODO: dont put in the address
-	    	L4_MsgAppendWord(&msg, (L4_Word_t) *bufferp);
-	    	bufferp += offset;
-
-	    }
-
-        L4_Set_MsgLabel(&msg, 1);
-    	L4_MsgLoad(&msg);
-
-		// TODO: check for error
-    	tag = L4_Send(sSystemId);
-        
-        not_sent_count -= to_send;
-
-    }
+	// sending message
+	L4_Set_MsgLabel(&msg, 1<<4);
+	L4_MsgLoad(&msg);
+	tag = L4_Send(sSystemId);
 
 	return count;
 }
