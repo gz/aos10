@@ -32,7 +32,7 @@ static char write_buffer[MSG_MAX_SIZE];
 
 
 void ttyout_init(void) {
-	sSystemId = L4_GlobalId(64, 1); // Is this the correct way to do it?
+	sSystemId = L4_Pager(); // Is this the correct way to do it?
 }
 
 size_t sos_write(const void *vData, long int position, size_t count, void *handle)
@@ -60,14 +60,17 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
 	    L4_MsgAppendWord(&msg, to_send);
 
 	    for(int offset = 0; offset < MSG_MAX_SIZE; offset += MSG_WORD_SIZE) {
-
-	    	L4_MsgAppendWord(&msg, (L4_Word_t) bufferp);
+			
+			// TODO: dont put in the address
+	    	L4_MsgAppendWord(&msg, (L4_Word_t) *bufferp);
 	    	bufferp += offset;
 
 	    }
 
         L4_Set_MsgLabel(&msg, 1);
     	L4_MsgLoad(&msg);
+
+		// TODO: check for error
     	tag = L4_Send(sSystemId);
         
         not_sent_count -= to_send;

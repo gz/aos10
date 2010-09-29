@@ -75,6 +75,7 @@ init_thread(void)
 
 #define TAG_SYSLAB(t)	((short) L4_Label(t) >> 4)
 
+// TODO: put in different file
 #define SOS_WRITE 0
 struct serial* ser;
 
@@ -145,10 +146,10 @@ static __inline__ void syscall_loop(void)
 			case SOS_WRITE:
 			{
 				//dprintf(0, "received SOS_WRITE\n");
-				char* message_string = (char*)L4_MsgWord(&msg, 1);
 				int total_sent = 0;
 				int sent = 0;
 				int len = L4_MsgWord(&msg, 0);
+				char* message_string = (char*) L4_MsgWord(&msg, 1);
 
 				do {
 					sent = serial_send(ser, message_string, len-total_sent);
