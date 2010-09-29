@@ -31,8 +31,10 @@ static L4_ThreadId_t sSystemId;
 
 
 void ttyout_init(void) {
-	sSystemId = L4_Pager(); // Is this the correct way to do it?
+	sSystemId = L4_Pager();
 }
+
+#define IPC_ERROR_FLAG_SET(tag) ((tag).X.flags & 0x1000)
 
 size_t sos_write(const void *vData, long int position, size_t count, void *handle)
 {
@@ -51,9 +53,13 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
 	// sending message
 	L4_Set_MsgLabel(&msg, 1<<4);
 	L4_MsgLoad(&msg);
+
 	tag = L4_Send(sSystemId);
 
-	return count;
+	if(IPC_ERROR_FLAG_SET(tag))
+		return 0;
+	else
+		return count;
 }
 
 
