@@ -16,6 +16,8 @@
 
 #include <serial.h>
 
+#include "syscalls.h"
+#include "sos_serial.h"
 #include "l4.h"
 #include "libsos.h"
 #include "network.h"
@@ -69,13 +71,8 @@ init_thread(void)
 }
 
 
-/* Some IPC labels defined in the L4 documentation */
-#define L4_PAGEFAULT	((L4_Word_t) -2)
-#define L4_INTERRUPT	((L4_Word_t) -1)
-
 #define TAG_SYSLAB(t)	((short) L4_Label(t) >> 4)
 
-#define SOS_WRITE 1
 struct serial* ser;
 
 /*
@@ -142,18 +139,34 @@ static __inline__ void syscall_loop(void)
 			break;
 
 			/* our system calls */
-			case SOS_WRITE:
+			case SOS_SERIAL_WRITE:
 			{
-				//dprintf(0, "received SOS_WRITE\n");
-				int len = (int) L4_MsgWord(&msg, 0);
-				char* message_string = (char*) L4_MsgWord(&msg, 1);
+				dprintf(0, "received SOS_SERIAL_WRITE\n");
 
 				int total_sent = 0;
 				int sent = 0;
 
+				assert(L4_UntypedWords(tag) == 5); // make sure there were 5 registers filled with stuff
+
+				int len = L4_MsgWord(&msg, 0);
+
+				L4_Word_t write_buffer[4];
+
+				dprintf(0, "len is: %d\n", len);
+
+				// copy in buffer here
+				int i;
+				for(i=1; i<=4; i++) {
+					write_buffer[i-1] = L4_MsgWord(&msg, i);
+				}
+
+				dprintf(0, "message is: %.16s\n", &write_buffer);
+				char* message_ptr = (char*) &write_buffer;
+
+				// sending to serial
 				do {
-					sent = serial_send(ser, message_string, len-total_sent);
-					message_string += sent;
+					sent = serial_send(ser, message_ptr, len-total_sent);
+					message_ptr += sent;
 
 					total_sent += sent;
 
@@ -163,10 +176,11 @@ static __inline__ void syscall_loop(void)
 
 				// In case we send faster than our serial driver allows we
 				// retry until all data is sent.
-				} while(total_sent < len);
+				} while( total_sent < len);
 
 				send = 0;
-				break;
+
+			break;
 			}
 
 			/* error? */

@@ -20,6 +20,7 @@
 #include <l4/kdebug.h>
 #include <l4/ipc.h>
 
+#include "../sos/syscalls.h"
 
 
 #define MSG_WORD_SIZE 4
@@ -27,39 +28,59 @@
 #define min(a,b) (((a) < (b)) ? (a) : (b))
 
 static L4_ThreadId_t sSystemId;
+static char write_buffer[MSG_MAX_SIZE];
 
 
 
 void ttyout_init(void) {
-	sSystemId = L4_Pager();
+	sSystemId = L4_Pager(); // Is this the correct way to do it?
 }
-
-#define IPC_ERROR_FLAG_SET(tag) ((tag).X.flags & 0x1000)
 
 size_t sos_write(const void *vData, long int position, size_t count, void *handle)
 {
     //dprintf("Send message with: %s", (char*) vData);
-	L4_Word_t* bufferp = (L4_Word_t*) vData;
 
-	// prepare IPC message
-	L4_Msg_t msg;
-	L4_MsgTag_t tag;
-	L4_MsgClear(&msg);
+    int not_sent_count = count;
+  	char* realdata = (char*) vData;
 
-	// set string length
-	L4_MsgAppendWord(&msg, count); // 1st register length of the string
-	L4_MsgAppendWord(&msg, (L4_Word_t) bufferp); // 2nd register pointer to the memory location of the string
+    while(not_sent_count > 0) {
 
-	// sending message
-	L4_Set_MsgLabel(&msg, 1<<4);
-	L4_MsgLoad(&msg);
+        int to_send = min(MSG_MAX_SIZE, not_sent_count);
 
-	tag = L4_Send(sSystemId);
+        // fill up buffer
+        memcpy(write_buffer, realdata, to_send);
+        realdata += to_send;
+        char* bufferp = write_buffer;
 
-	if(IPC_ERROR_FLAG_SET(tag))
-		return 0;
-	else
-		return count;
+        // prepare IPC message
+        L4_Msg_t msg;
+        L4_MsgTag_t tag;
+        L4_MsgClear(&msg);
+
+        // set string length
+	    L4_MsgAppendWord(&msg, to_send);
+
+	    for(int offset = 0; offset < 4; offset += 1) {
+
+	    	L4_MsgAppendWord(&msg, (*(L4_Word_t*)bufferp) );
+	    	bufferp += 4; // advanced 4 bytes forward
+
+	    }
+
+        L4_Set_MsgLabel(&msg, SOS_SERIAL_WRITE << 4);
+    	L4_MsgLoad(&msg);
+
+		// TODO: check for error
+    	tag = L4_Send(sSystemId);
+
+    	if(L4_IpcFailed(tag))
+    		return to_send;
+        
+        not_sent_count -= to_send;
+
+    }
+
+	return count;
 }
 
 
