@@ -17,7 +17,6 @@
 #include <serial.h>
 
 #include "syscalls.h"
-#include "sos_serial.h"
 #include "l4.h"
 #include "libsos.h"
 #include "network.h"
