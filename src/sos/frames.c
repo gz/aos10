@@ -7,9 +7,6 @@
  * byte per frame. However for simplicity we allocate a multiple of
  * 4096 bytes for the frame table
  *
- * TODO: if assert(memsize % PAGESIZE == 0) fails then it does not make sense to
- * allocate multiples of PAGESIZE for the frame table structure.
- *
  * TODO: maybe its better to allocate the frame table in the heap memory of root server?
  */
 
