@@ -14,12 +14,11 @@
 #include <stdlib.h>
 #include <stdint.h>
 
-#include <serial.h>
-
 #include "syscalls.h"
 #include "l4.h"
 #include "libsos.h"
 #include "network.h"
+#include "sos_serial.h"
 
 #include "pager.h"
 #include "frames.h"
@@ -72,8 +71,6 @@ init_thread(void)
 
 #define TAG_SYSLAB(t)	((short) L4_Label(t) >> 4)
 
-struct serial* ser;
-
 /*
   Syscall loop.
 
@@ -96,9 +93,7 @@ static __inline__ void syscall_loop(void)
 
     for (;;) {
 		L4_MsgTag_t tag;
-	
-		ser = serial_init();
-	
+
 		// Wait for a message, sometimes sending a reply
 		if (!send)
 			tag = L4_Wait(&tid); // Nothing to send, so we just wait
@@ -139,48 +134,9 @@ static __inline__ void syscall_loop(void)
 
 			/* our system calls */
 			case SOS_SERIAL_WRITE:
-			{
-				dprintf(0, "received SOS_SERIAL_WRITE\n");
-
-				int total_sent = 0;
-				int sent = 0;
-
 				assert(L4_UntypedWords(tag) == 5); // make sure there were 5 registers filled with stuff
-
-				int len = L4_MsgWord(&msg, 0);
-
-				L4_Word_t write_buffer[4];
-
-				dprintf(0, "len is: %d\n", len);
-
-				// copy in buffer here
-				int i;
-				for(i=1; i<=4; i++) {
-					write_buffer[i-1] = L4_MsgWord(&msg, i);
-				}
-
-				dprintf(0, "message is: %.16s\n", &write_buffer);
-				char* message_ptr = (char*) &write_buffer;
-
-				// sending to serial
-				do {
-					sent = serial_send(ser, message_ptr, len-total_sent);
-					message_ptr += sent;
-
-					total_sent += sent;
-
-					if(total_sent < len) {
-						dprintf(0, "SOS_WRITE: serial driver's internal buffer fills faster than it can actually output data");
-					}
-
-				// In case we send faster than our serial driver allows we
-				// retry until all data is sent.
-				} while( total_sent < len);
-
-				send = 0;
-
+				sos_serial_send(&msg, &send);
 			break;
-			}
 
 			/* error? */
 			default:
