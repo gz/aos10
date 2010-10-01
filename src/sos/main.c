@@ -63,6 +63,9 @@ init_thread(void)
 	dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
 
+    dprintf(0, "Calling frame test 1:\n");
+    frame_test1();
+
     // Thread finished - block forever
     for (;;)
 	sos_usleep(30 * 1000 * 1000);

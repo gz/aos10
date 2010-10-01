@@ -5,10 +5,10 @@
 #include "l4.h"
 #include "libsos.h"
 
-#define verbose 2
+#define verbose 1
 
+// struct used to communicate with the serial driver
 static struct serial* ser = NULL;
-
 
 /**
  * Writes incoming IPC strings out to the serial port.
@@ -21,7 +21,7 @@ static struct serial* ser = NULL;
  *
  */
 void sos_serial_send(L4_Msg_t* msg_p, int* send_p) {
-	dprintf(0, "received SOS_SERIAL_WRITE\n");
+	dprintf(1, "received SOS_SERIAL_WRITE\n");
 
 	if(ser == NULL)
 		ser = serial_init();
@@ -32,7 +32,7 @@ void sos_serial_send(L4_Msg_t* msg_p, int* send_p) {
 
 	L4_Word_t write_buffer[4];
 
-	dprintf(0, "len is: %d\n", len);
+	dprintf(2, "len is: %d\n", len);
 
 	// copy in buffer here
 	int i;
@@ -40,7 +40,7 @@ void sos_serial_send(L4_Msg_t* msg_p, int* send_p) {
 		write_buffer[i-1] = L4_MsgWord(msg_p, i);
 	}
 
-	dprintf(0, "message is: %.16s\n", &write_buffer);
+	dprintf(2, "message is: %.16s\n", &write_buffer);
 	char* message_ptr = (char*) &write_buffer;
 
 	// sending to serial

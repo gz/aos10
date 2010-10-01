@@ -17,8 +17,7 @@
 
 #include "frames.h"
 
-#define verbose 2
-#define max(a,b) (((a) > (b)) ? (a) : (b))
+#define verbose 3
 
 static L4_Word_t start;
 static L4_Word_t end;
@@ -28,12 +27,12 @@ static L4_Word_t stack_count = 0; // holds the number of stack elements
 
 
 static void frame_stack_add(L4_Word_t frame_address) {
-	(frame_stack_start+(++stack_count))->address = frame_address;
+	(frame_stack_start+(stack_count++))->address = frame_address;
 }
 
 static L4_Word_t frame_stack_remove(void) {
-	assert(stack_count >= 0);
-	return (frame_stack_start+(stack_count--))->address;
+	assert(stack_count >= 1);
+	return (frame_stack_start+(--stack_count))->address;
 }
 
 
@@ -52,25 +51,29 @@ void frame_init(L4_Word_t low, L4_Word_t high)
 	L4_Word_t frame_count = memsize / PAGESIZE;
 
 	L4_Word_t frame_table_size = frame_count * sizeof(frame_t);
+	dprintf(2, "Physical Memory starts at address: %d\n", start);
+	dprintf(2, "Physical Memory ends at address: %d\n", end);
 	dprintf(2, "Mem Size: %d bytes\n", memsize);
 	dprintf(2, "Frame Count: %d frames\n", frame_count);
 	dprintf(2, "Frame List Structure size: %d bytes\n", sizeof(frame_t));
 	dprintf(2, "Frame Table Size: %d bytes\n", frame_table_size);
-	//assert(frame_table_size <= PAGESIZE); Frame Table Size: 23432 bytes
 
-
+	L4_Word_t frame_table_space = (frame_table_size+PAGESIZE) & ~(PAGESIZE-1); // align frame table to be multiple of 4096
+	dprintf(2, "Frame Table Size aligned: %d bytes\n",  frame_table_space);
 
 	frame_stack_start = (frame_t*) start; // lets point our stack to the start
 	stack_count = 0;
 
-	start += max(PAGESIZE, frame_table_size & ~(PAGESIZE-1) ); // update so we won't overwrite the table
-															   // align frame_table_size to be multiple of 4096
+	start += frame_table_space; // update so we won't overwrite the table
+	dprintf(2, "Physical Frames will start at address: %d\n", start);
+
 	L4_Word_t frame_iter;
 	// initially all frames are free so we add them all on the stack
 	for( frame_iter = start; frame_iter < end; frame_iter += PAGESIZE) {
 		frame_stack_add(frame_iter);
 	}
 	assert(frame_iter == end);
+	dprintf(2, "Stack count now is: %d\n", stack_count);
 
 }
 
@@ -81,10 +84,13 @@ void frame_init(L4_Word_t low, L4_Word_t high)
  * free frames.
  */
 L4_Word_t frame_alloc(void) {
-	if(stack_count >= 0)
+	if(stack_count >= 1)
 		return frame_stack_remove();
-	else
+	else {
+		dprintf(0, "%s: Ran out of physical memory :-(.\n", __FUNCTION__);
 		return (L4_Word_t) NULL;
+	}
+
 }
 
 
