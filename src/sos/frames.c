@@ -156,6 +156,8 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	}
 	assert(frame_iter == end);*/
 
+	// for better debugging we add the frames in reverse order on the stack
+	// so calls to frame_alloc will return with the first frames first
 	for(frame_iter = end-PAGESIZE; frame_iter >= start; frame_iter -= PAGESIZE) {
 		frame_stack_add(frame_iter);
 		bitfield_set(frame_iter, 0);
