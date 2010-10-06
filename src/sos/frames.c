@@ -40,16 +40,17 @@ static L4_Word_t frame_stack_remove(void) {
  * Initialise the frame table. The current implementation is
  * clearly not sufficient.
  */
-void frame_init(L4_Word_t low, L4_Word_t high)
-{
-    start = low;
+void frame_init(L4_Word_t low, L4_Word_t high) {
+	start = low;
 	end = high;
-
 	L4_Word_t memsize = end - start;
 
-	assert(memsize % PAGESIZE == 0);
-	L4_Word_t frame_count = memsize / PAGESIZE;
+	// preconditions
+	assert(low < high);
+	assert(memsize >= 2*PAGESIZE); // does not make sense otherwise
+	assert(memsize % PAGESIZE == 0); // our code is based on that assumption
 
+	L4_Word_t frame_count = memsize / PAGESIZE;
 	L4_Word_t frame_table_size = frame_count * sizeof(frame_t);
 	dprintf(2, "Physical Memory starts at address: %d\n", start);
 	dprintf(2, "Physical Memory ends at address: %d\n", end);
@@ -59,6 +60,8 @@ void frame_init(L4_Word_t low, L4_Word_t high)
 	dprintf(2, "Frame Table Size: %d bytes\n", frame_table_size);
 
 	L4_Word_t frame_table_space = (frame_table_size+PAGESIZE) & ~(PAGESIZE-1); // align frame table to be multiple of 4096
+	assert(frame_table_space <= memsize-PAGESIZE); // we need at least one page to manage
+
 	dprintf(2, "Frame Table Size aligned: %d bytes\n",  frame_table_space);
 
 	frame_stack_start = (frame_t*) start; // lets point our stack to the start
@@ -98,6 +101,9 @@ L4_Word_t frame_alloc(void) {
  * Frame is marked as free by pushing it to the stack.
  */
 void frame_free(L4_Word_t frame) {
+	//if(!is_in_memory_range(frame))
+	//if(!is_valid_frame_address(frame))
+	//if(!is_free(frame))
 	frame_stack_add(frame);
 }
 
