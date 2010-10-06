@@ -64,7 +64,7 @@ init_thread(void)
     }
 
     dprintf(0, "Calling frame test 1:\n");
-    frame_test1();
+    frame_test4();
 
     // Thread finished - block forever
     for (;;)
