@@ -3,9 +3,12 @@
  * =============
  * This is a simple stack based frame table implementation.
  * Because it's a stack add/remove operations are both in
- * O(1). The Memory used for the frame table is currently at 4
- * byte per frame. However for simplicity we allocate a multiple of
- * 4096 bytes for the frame table
+ * O(1). To verify if a frame is currently free/used we implemented
+ * a bit-field which tracks all frames. This allows us to check the state
+ * of a given frame in O(1).
+ * The Memory used for the frame management is sizeof(frame_t) (i.e. 4 bytes)
+ * + 1 bit in the bit-field. However for simplicity we allocate the space
+ * as a contiguous block which is a multiple of the PAGESIZE.
  *
  * TODO: maybe its better to allocate the frame table in the heap memory of root server?
  */
