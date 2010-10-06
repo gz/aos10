@@ -21,6 +21,11 @@
 #define BITS_PER_CHAR 8
 #define ALIGN_TO_PAGESIZE(bytes) (((bytes)+PAGESIZE) & ~(PAGESIZE-1))
 
+// List elements used to maintain a list of the free frames
+typedef struct frame {
+	L4_Word_t address; // frame start address
+} frame_t;
+
 static L4_Word_t start;
 static L4_Word_t end;
 
