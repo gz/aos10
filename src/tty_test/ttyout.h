@@ -9,7 +9,7 @@
  */
 extern void ttyout_init(void);
 
-size_t dprint(const void *vData, size_t count);
+//size_t dprint(const void *vData, size_t count);
 
 /* routines needed by the libs/c i.e. -lc implementation */
 

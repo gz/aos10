@@ -83,16 +83,11 @@
 #define	bl  blx
 #endif
 
-	.code	32
+        .code   32
 BEGIN_PROC(_start)
-	ldr     sp,     2f
         bl      __L4_Init
         bl      main
-	bl	exit
-2:	.word	_stack_top
+        bl      exit
 END_PROC(_start)
         .bss
         .align
-_stack:
-        .space  8192
-_stack_top:

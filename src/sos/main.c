@@ -50,21 +50,22 @@ init_thread(void)
     L4_Word_t task = 0;
     L4_BootRec_t *binfo_rec;
     for (i = 1; (binfo_rec = sos_get_binfo_rec(i)); i++) {
-	if (L4_BootRec_Type(binfo_rec) != L4_BootInfo_SimpleExec)
-	    continue;
+		if (L4_BootRec_Type(binfo_rec) != L4_BootInfo_SimpleExec)
+			continue;
 
-	// Must be a SimpleExec boot info record
-	dprintf(0, "Found exec: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
+		// Must be a SimpleExec boot info record
+		dprintf(0, "Found exec: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
 
-	// Start a new task with this program
-	L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), 
-		(void *) L4_SimpleExec_TextVstart(binfo_rec),
-		(void *) &user_stack_s[STACK_SIZE]);
-	dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
+		// Start a new task with this program
+		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(),
+			(void *) L4_SimpleExec_TextVstart(binfo_rec),
+			(void *) &user_stack_s[STACK_SIZE]);
+
+		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
 
-    dprintf(0, "Calling frame test 1:\n");
-    frame_test4();
+    //dprintf(0, "Calling frame test 1:\n");
+    //frame_test4();
 
     // Thread finished - block forever
     for (;;)
