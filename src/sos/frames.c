@@ -143,7 +143,7 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 
 	// preconditions
 	assert(low < high);
-	assert(memsize >= 2*PAGESIZE); // we need at least 2 pages
+	//assert(memsize >= 2*PAGESIZE); // we need at least 2 pages
 	assert(memsize % PAGESIZE == 0); // our code is based on that assumption
 
 	L4_Word_t frame_count = memsize / PAGESIZE;
@@ -154,7 +154,7 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 
 	dprintf(2, "Physical Memory starts at address: %d\n", start);
 	dprintf(2, "Physical Memory ends at address: %d\n", end);
-	dprintf(2, "Mem Size: %d bytes\n", memsize);
+	dprintf(2, "Memory Size: %d bytes\n", memsize);
 	dprintf(2, "Frame Count: %d frames\n", frame_count);
 	dprintf(2, "Frame List Structure size: %d bytes\n", sizeof(frame_t));
 	dprintf(2, "Frame Table Size: %d bytes\n", frame_table_size);
@@ -188,7 +188,7 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 		frame_stack_add(frame_iter);
 		bitfield_set(frame_iter, 0);
 	}
-	assert(frame_iter == (start-PAGESIZE));
+	//assert(frame_iter == (start-PAGESIZE));
 
 	dprintf(2, "Stack count now is: %d\n", stack_count);
 
