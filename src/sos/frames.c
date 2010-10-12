@@ -17,28 +17,39 @@
 #include "l4.h"
 
 #include "frames.h"
+
 #define verbose 3
 
 #define BITS_PER_CHAR 8
-#define ALIGN_TO_PAGESIZE(bytes) (((bytes)+PAGESIZE) & ~(PAGESIZE-1))
+//#define ALIGN_TO_PAGESIZE(bytes) (((bytes)+PAGESIZE) & ~(PAGESIZE-1))
 
-// List elements used to maintain a list of the free frames
+/** List elements used to maintain a list of the free frames */
 typedef struct frame {
-	L4_Word_t address; // frame start address
+	L4_Word_t address; /*!< Frame start address */
 } frame_t;
 
-static L4_Word_t start;
-static L4_Word_t end;
+static L4_Word_t start; /**< Start address of physical memory */
+static L4_Word_t end;	/**< Last address of physical memory */
+static L4_Word_t stack_count = 0; /**< Holds the current number of stack elements */
 
 static frame_t* frame_stack_start = NULL;
 static char* bitfield_start = NULL;
 
-static L4_Word_t stack_count = 0; // holds the number of stack elements
 
+/**
+ * Pushes a frame on the stack.
+ *
+ * @param frame_address address which is pushed on the stack
+ */
 static void frame_stack_add(L4_Word_t frame_address) {
 	(frame_stack_start+(stack_count++))->address = frame_address;
 }
 
+/**
+ * Removes a Frame address from the stack.
+ *
+ * @return Address of the removed frame.
+ */
 static L4_Word_t frame_stack_remove(void) {
 	assert(stack_count >= 1);
 	return (frame_stack_start+(--stack_count))->address;
@@ -47,6 +58,9 @@ static L4_Word_t frame_stack_remove(void) {
 /**
  * Checks if the given parameter `frame` is within the memory range and
  * if the address is always at the start of a given frame.
+ *
+ * @param frame address of the frame
+ * @return A boolean depending on if the address is valid or not.
  */
 static L4_Bool_t is_valid_frame_address(L4_Word_t frame) {
 	L4_Bool_t address_in_range = start <= frame && frame < end;
@@ -58,6 +72,9 @@ static L4_Bool_t is_valid_frame_address(L4_Word_t frame) {
 
 /**
  * Sets the used bit of a given frame to the value in `bit`.
+ *
+ * @param frame which frame to set
+ * @param bit low or high
  */
 static void bitfield_set(L4_Word_t frame, L4_Bool_t bit) {
 	assert(is_valid_frame_address(frame));
@@ -77,7 +94,9 @@ static void bitfield_set(L4_Word_t frame, L4_Bool_t bit) {
 }
 
 /**
- * Returns 0/1 depending on wheter a `frame` is marked as used or
+ * Gets the value for the given `frame` in the bitfield.
+ *
+ * @return 0 or 1 depending on wheter a `frame` is marked as used or
  * not in the frame table.
  */
 static int bitfield_get(L4_Word_t frame) {
@@ -97,6 +116,9 @@ static int bitfield_get(L4_Word_t frame) {
 /**
  * This function prints the current bitfield up to
  * a given number of bits. Used for debugging.
+ *
+ * @param first where to start printing in the bitfield
+ * @param number_of_bits #bits printed beginning from first
  */
 void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
 	dprintf(0, "Printing Bitfield from %d to %d:\n", first, number_of_bits-1);
@@ -109,8 +131,10 @@ void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
 }
 
 /**
- * Initialise the frame table. The current implementation is
- * clearly not sufficient.
+ * Initialize the frame table.
+ *
+ * @param low lowest physical memory address
+ * @param high highest physical memory address
  */
 void frame_init(L4_Word_t low, L4_Word_t high) {
 	start = low;
@@ -172,9 +196,11 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 
 
 /**
- * The top element is removed from the stack and its corresponding
- * address is returned. NULL is returned in case there are no more
- * free frames.
+ * Allocates a frame (PAGESIZE bytes) in physical memory.
+ * The top element is removed from the stack and the corresponding
+ * bit in the bit field is set to 1.
+ *
+ * @return start address of the frame or NULL in case there are no more frames left
  */
 L4_Word_t frame_alloc(void) {
 	if(stack_count >= 1) {
@@ -190,8 +216,11 @@ L4_Word_t frame_alloc(void) {
 }
 
 /**
- * Frame is marked as free by pushing it to the stack and setting the corresponding
- * bit in the bitfield to 0.
+ * Frees a previously allocated frame.
+ * Frame is pushed on the stack and the corresponding bit in the bit field is
+ * set to 0.
+ *
+ * @param frame start address of frame to be freed
  */
 void frame_free(L4_Word_t frame) {
 	assert(is_valid_frame_address(frame));

@@ -3,10 +3,7 @@
 #include <stdlib.h>
 
 #include "frames.h"
-
-
-
-
+#include "frames_test.h"
 
 /* Allocate 10 frames and make sure you can touch them all */
 void frame_test1(void) {
