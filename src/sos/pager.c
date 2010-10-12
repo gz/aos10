@@ -4,7 +4,15 @@
  * We're having a Pagesize of 4096 bytes which requires us to use a
  * 12 bit offset. Since ARM uses 32bit addresses we can address with
  * the remaining 20 bits just about 2^20 frames (And since we only have about
- * 5k so were good).
+ * 5k frames were good).
+ *
+ * Layout of our virtual address:
+ * ------------------------------
+ * First Level Table Index	(12 bits) 4096 Entries
+ * 2nd Level Table Index 	( 8 bits)  256 Entries
+ * Page Index				(12 bits)
+ *							=========
+ *							 32 bits
  *
  */
 
@@ -27,6 +35,14 @@
 #include "syscalls.h"
 
 #define verbose 2
+
+typedef struct page_entry {
+	void* address;
+} page;
+
+void pager_init() {
+
+}
 
 void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 {

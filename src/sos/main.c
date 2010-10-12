@@ -44,6 +44,8 @@ init_thread(void)
 {
     // Initialise the network for libsos_logf_init
     network_init();
+    frame_init((low + HEAP_SIZE), high); // Initialise the frame table
+    pager_init();
 
     // Loop through the BootInfo starting executables
     int i;
@@ -172,7 +174,6 @@ main (void)
     sos_find_memory(&low, &high);
     dprintf(0, "Available memory from 0x%08lx to 0x%08lx - %luMB\n", 
 	   low, high, (high - low) / ONE_MEG);
-    frame_init((low + HEAP_SIZE), high); // Initialise the frame table
 
     // Spawn the setup thread which completes the rest of the initialisation,
     // leaving this thread free to act as a pager and interrupt handler.
