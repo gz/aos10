@@ -1,14 +1,12 @@
-/****************************************************************************
+/**
+ * Page Table
+ * =============
+ * We're having a Pagesize of 4096 bytes which requires us to use a
+ * 12 bit offset. Since ARM uses 32bit addresses we can address with
+ * the remaining 20 bits just about 2^20 frames (And since we only have about
+ * 5k so were good).
  *
- *      $Id: pager.c,v 1.4 2003/08/06 22:52:04 benjl Exp $
- *
- *      Description: Example pager for the SOS project.
- *
- *      Author:			Godfrey van der Linden
- *      Original Author:	Ben Leslie
- *
- ****************************************************************************/
-
+ */
 
 //
 // Pager is called from the syscall loop whenever a page fault occurs. The

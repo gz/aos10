@@ -7,12 +7,10 @@
  * a bit-field which tracks all frames. This allows us to check the state
  * of a given frame in O(1).
  * The Memory used for the frame management is sizeof(frame_t) (i.e. 4 bytes)
- * + 1 bit in the bit-field. However for simplicity we allocate the space
- * as a contiguous block which is a multiple of the PAGESIZE.
- *
- * TODO: maybe its better to allocate the frame table in the heap memory of root server?
+ * + 1 bit in the bit-field.
  */
 
+#include <stdlib.h>
 #include <stddef.h>
 #include <assert.h>
 #include "libsos.h"
@@ -127,8 +125,8 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	L4_Word_t frame_count = memsize / PAGESIZE;
 	L4_Word_t frame_table_size = frame_count * sizeof(frame_t);
 	L4_Word_t bit_field_size = (frame_count / 8) + 1;
-	L4_Word_t datastructure_space = ALIGN_TO_PAGESIZE(frame_table_size + bit_field_size);
-	assert(datastructure_space <= memsize-PAGESIZE); // we need at least one page to manage
+	//L4_Word_t datastructure_space = ALIGN_TO_PAGESIZE(frame_table_size + bit_field_size);
+	//assert(datastructure_space <= memsize-PAGESIZE); // we need at least one page to manage
 
 	dprintf(2, "Physical Memory starts at address: %d\n", start);
 	dprintf(2, "Physical Memory ends at address: %d\n", end);
@@ -137,15 +135,19 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	dprintf(2, "Frame List Structure size: %d bytes\n", sizeof(frame_t));
 	dprintf(2, "Frame Table Size: %d bytes\n", frame_table_size);
 	dprintf(2, "Bit field size: %d bytes\n",  bit_field_size);
-	dprintf(2, "Required memory for frame bookkeeping: %d bytes\n",  datastructure_space);
-	dprintf(2, "Reserved Pages for bookkeeping: %d\n",  datastructure_space / PAGESIZE);
+	//dprintf(2, "Required memory for frame bookkeeping: %d bytes\n",  datastructure_space);
+	//dprintf(2, "Reserved Pages for bookkeeping: %d\n",  datastructure_space / PAGESIZE);
 
-	frame_stack_start = (frame_t*) start; // lets point our stack to the start
+	//frame_stack_start = (frame_t*) start; // lets point our stack to the start
+	frame_stack_start = (frame_t*) malloc(frame_table_size);
+	assert(frame_stack_start != NULL);
 	stack_count = 0;
 
-	bitfield_start = (char*) (frame_stack_start + frame_table_size);
+	//bitfield_start = (char*) (frame_stack_start + frame_table_size);
+	bitfield_start = (char*) malloc(bit_field_size);
+	assert(bitfield_start != NULL);
 
-	start += datastructure_space; // update so we won't overwrite the table
+	//start += datastructure_space; // update so we won't overwrite the table
 	dprintf(2, "Physical Frames will start at address: %d\n", start);
 
 	L4_Word_t frame_iter;

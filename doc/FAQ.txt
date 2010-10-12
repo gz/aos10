@@ -1,0 +1,138 @@
+Q1: In M0
+
+are we supposed to implement reading from the netcat console too( using the recv handler thingy)?
+
+A1: No, reading from the console is for a later milestone. You’re free to play around with it if you like, however.
+
+
+Q2: Test message sizes
+
+How large message sizes will our function be tested against?
+
+A2: Like all good OS services, any feature should only be bounded by available resources (or sane resource management policies).
+
+
+Q3: warnings in tools/machines.py
+
+hex/oct constants > sys.maxint will return positive values in Python 2.4 and up
+Is there a way to get rid of that annoying message?
+
+A3: Yes, open tools/machines.py and replace all the 0xa0000000 with 0xa0000000L.
+
+
+Q4: Assignments and ideas from research papers
+
+Can we implement algorithms, data structures and, generally speaking, ideas taken from books and research papers?
+
+A4: Yes! We encourage this as much as possible! In AOS reading other OS code (linux, BSD, whatever) is certainly encouraged. You can even borrow their code, provided you cite your source properly in the code.
+
+
+Q5: Why I received an -5 exception rather than page fault?
+
+I caught an architecture specific exception in syscall_loop():
+
+syscall_loop: got msg from 43, (-5 0x00711c08)
+0x0056f6a0: 00000000 00000000 200fffdf 00000103
+0x0056f690: 00000000 200fffff 00711c08 ffb00005
+43 is my userland thread. According to the reference, the label is -5, so it’s architecture specific exceptions. And from ARM Interface, I know the IP is 0x00711c08, and SP is 200fffff. After objdump, I found where the IP point to is L4_Init():
+
+00001c08 <__L4_Init>:
+__L4_Init():
+libs/l4/src/arch-arm/arm-syscalls.c:90
+1c08:	e92d47f0 	stmdb	sp!, {r4, r5, r6, r7, r8, r9, sl, lr}
+And according to ARM Interface, the fault address is “0x200fffdf”, which is SP - 0×20, and 0×20 is the size of {r4, r5, r6, r7, r8, r9, sl, lr}.
+
+A5: That’s an odd address. which is unaligned. The stack pointer must be word-aligned.
+
+gvdl: Actually all memory addresses must be cache aligned, unless you implement an unaligned trap handler that is.
+
+
+Q6: Why I received error of "IPC send error, code is 0x5 (see p55)"
+
+Sometimes I receive error like:
+
+syscall_loop: IPC error, label is (0).
+IPC send error, code is 0x5 (see p55)
+I have seen this error several times, I can’t find the regular of the error, and don’t know how to debug such error? It’s an asych error, however I never use any asych IPC. How can I locate which point is this error happened?
+
+A6: I found the problem. It’s my fault in pager(). I forgot to load a new message to MR0 which will be replied to pagefault thread. Actually default pager() didn’t do. I should reply a message with MR0 be clear 0, according to Pagefault protocol.
+
+The reason why I didn’t realize this bug is in my pager() is that the pager() successfully allocate 1 or more pages, but message happened at some point later.
+
+I found a regular in this error, it looks will not happen when the faulting address is 0x71xxxx, however it will happen when the page fault is 0x200ffff0 which is my stack.
+
+If I didn’t clear MR0 to be 0, MR0 can be anything, so, it maybe send some undefined message.
+
+Details analysis of what exactly happened:
+
+After pagefault, according to pagefault protocol the MR0 is
+
+[-2(12/44)][0rwx][0(4)][~(6)][u=2(6)]
+And then I call MapControl(), according to MapControl protocol, MR0 will be PhysDesc of first MapItem, which is
+
+[phys(26/58)][attr(6)]
+And since L4_MapFpage() is only modify mapping not read mapping. MR0 will not be used for return value. So MR0 will still possible be PhysDesc (not guaranteed).
+
+And after returned from pager, the L4_ReplyWait() will be called since send == 1.
+
+MR0, which is actually PhysDesc of last time mapping, will be used as an IPC MsgTag.
+
+The L4_MsgTag_t.X.flags is located in middle of phys, so some value will make ‘n’ bit in flag be 1, actually it does. As following debug info:
+
+init_thread(): new task:ip:0x710000, sp:0x200ffff0.
+
+Enter pager(tid: 0x43, faulting_ip: 0x710001, faulting_addr:  0x710000, permission: 0x1.
+Current MR0(L4_MsgTag) is 0x71000[label: 0x7, flags: 0x1, u: 0x0.
+
+Enter pager(tid: 0x43, faulting_ip: 0x711ba1, faulting_addr:  0x711ba0, permission: 0x1.
+Current MR0(L4_MsgTag) is 0x71100[label: 0x7, flags: 0x1, u: 0x0.
+
+Enter pager(tid: 0x43, faulting_ip: 0x711ba1, faulting_addr:  0x200fffd0, permission: 0x4.
+Current MR0(L4_MsgTag) is 0x92600[label: 0x9, flags: 0x2, u: 0x0.
+Here, the 0×92600, which is PhysDesc I mapped before, will be parsed as MagTag, flags is 0×2, which ‘n’ bit is set to 1, so asynch message will be sent.
+
+That is the reason sometimes it happen, sometime not, depends on what physical address I mapping. So, I just clear the message as pagefault protocol at the end of pager(), it’s gone.
+
+    //    Generate Reply message
+    L4_Set_MsgMsgTag(msgP, L4_Niltag);
+    L4_MsgLoad(msgP); 
+
+Q7. Wheres include/sos.h for M3?
+
+The spec for M3 talks about an interface in include/sos.h. The source tree I’ve been working on doesnt have that file. Can I download it from somewhere?
+
+*gvdl*: Check out the new milestone M3 page. I have added a link to sos.h
+
+
+Q8. Showing GCC Command Line
+
+If you want to see the actual command line used to build a file, rather than the pretty output, replace in tools/build.py the CCCOMSTR flag with something like
+
+kargs["CCCOMSTR"] =  "$CC  -o $TARGET -c $_CCFLAGS  $_CCCOMCOM $SOURCES"
+
+Q9. Tag vs. Label
+
+As explained in the reference manual, a tag describes a message (number of words, whether to block on send/receive, etc). A label is a field of the tag which you are free to set to any value, it is a message ID.
+
+
+Q10. L4_Set_MsgMsgTag vs. L4_Set_MsgTag
+
+L4_Set_MsgMsgTag(): Modifies an L4_Msg_t structure (and thus takes a pointer to L4_Msg_t as an argument)
+
+L4_Set_MsgTag(): Modifies the currently loaded message (by calling LoadMR)
+
+
+Q11. Strange exceptions when a thread exits
+
+If you see something like
+
+send_exception_ipc:722: Unable to deliver user exception: IPC error.
+--- KD# Unhandled User Undefined Instruction ---
+even from L4_Wait(), check that you haven’t started a thread which has quit without calling L4_Stop. For example, when the thread exits it should call L4_Stop(L4_Myself())
+
+
+Q12. Update lectures page
+
+Could the Lectures page have Kevin’s lectures’ slides linked from the page please?
+
+
