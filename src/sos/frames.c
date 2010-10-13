@@ -163,12 +163,12 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	//dprintf(2, "Reserved Pages for bookkeeping: %d\n",  datastructure_space / PAGESIZE);
 
 	//frame_stack_start = (frame_t*) start; // lets point our stack to the start
-	frame_stack_start = (frame_t*) malloc(frame_table_size);
+	frame_stack_start = (frame_t*) malloc(frame_table_size); // this is never freed but it's ok
 	assert(frame_stack_start != NULL);
 	stack_count = 0;
 
 	//bitfield_start = (char*) (frame_stack_start + frame_table_size);
-	bitfield_start = (char*) malloc(bit_field_size);
+	bitfield_start = (char*) malloc(bit_field_size); // this is never freed but it's ok
 	assert(bitfield_start != NULL);
 
 	//start += datastructure_space; // update so we won't overwrite the table

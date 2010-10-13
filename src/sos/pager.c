@@ -16,7 +16,19 @@
  *
  */
 
+/** Small test to see if we have enough heap
+void* first_level_table = malloc(4096*4);
+assert(first_level_table != NULL);
+
+for(int i=0; i<256; i++) {
+	void* second_level_table = malloc(256*4);
+	assert(second_level_table);
+}
+*/
+
+#include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <assert.h>
 
 #include <l4/types.h>
@@ -35,15 +47,70 @@
 
 #define PHYSICAL_MEMORY_END 0x2000000
 
+#define FIRST_LEVEL_BITS 12
+#define SECOND_LEVEL_BITS 8
+
+#define FIRST_LEVEL_INDEX(addr)  ( ((addr) & 0xFFF00000) >> 20 )
+#define SECOND_LEVEL_INDEX(addr) ( ((addr) & 0x000FF000) >> 12 )
+
 /** List element used in the first level page table */
 typedef struct page_entry {
 	void* address;
 } page_t;
 
+static page_t* first_level_table = NULL;
 
-/** Initializes 1st level page table structure by allocating it on the heap. */
-void pager_init() {
+
+/**
+ * Performs a lookup in the first level page table.
+ *
+ * @param index where to look at
+ * @return page table entry at position `index`
+ */
+static page_t* first_level_lookup(L4_Word_t index) {
+	assert(index >= 0 && index < (1 << FIRST_LEVEL_BITS));
+
+	return first_level_table+index;
 }
+
+/**
+ * Performs a lookup in a second level page table.
+ *
+ * @param second_level_table which table to look in
+ * @param index which table entry
+ * @return table entry
+ */
+static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) {
+	assert(index >= 0 && index < (1 << SECOND_LEVEL_BITS));
+
+	return second_level_table+index;
+}
+
+/**
+ * Reserve space for 2nd level page table and point the corresponding
+ * first level entry to it. In addition the allocated region is set to
+ * zero.
+ *
+ * @param first_level_entry
+ */
+static void create_second_level_table(page_t* first_level_entry) {
+	assert(first_level_entry->address == NULL); // TODO: do we want this?
+
+	first_level_entry->address = malloc(1 << SECOND_LEVEL_BITS); // TODO: we need to care about freeing this later...
+	assert(first_level_entry->address != NULL);
+
+	memset(first_level_entry->address, 0, 1 << SECOND_LEVEL_BITS);
+}
+
+
+/** Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0. */
+void pager_init() {
+	first_level_table = malloc(1 << FIRST_LEVEL_BITS); // this is never freed but it's ok
+	assert(first_level_table != NULL);
+
+	memset(first_level_table, 0, 1 << FIRST_LEVEL_BITS);
+}
+
 
 /**
  * Method called by the SOS Server whenever a page fault occurs.
@@ -76,8 +143,31 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 			printf(" Can't map page at %lx\n", addr);
 		}
 	}
-	else {
-		// wohoo my fancy pager here
+	else { // perform a 2 level page table lookup
+
+		page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+		if(first_entry->address == NULL) {
+			create_second_level_table(first_entry); // set up new 2nd level page table
+		}
+
+		page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+		if(second_entry->address == NULL) {
+			second_entry->address = (void*) frame_alloc();
+
+			L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12);
+			L4_Set_Rights(&targetFpage, L4_ReadWriteOnly);
+
+			L4_PhysDesc_t phys = L4_PhysDesc( ((L4_Word_t) second_entry->address), L4_DefaultMemory);
+
+			if ( !L4_MapFpage(tid, targetFpage, phys) ) {
+				sos_print_error(L4_ErrorCode());
+				printf(" Can't map page at %lx\n", addr);
+			}
+		}
+		else {
+			// what to do here? return address?
+		}
+
 	}
 
 	// Generate Reply message

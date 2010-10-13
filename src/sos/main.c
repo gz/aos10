@@ -36,7 +36,7 @@
  */
 #define STACK_SIZE 0x1000
 static L4_Word_t init_stack_s[STACK_SIZE];
-static L4_Word_t user_stack_s[STACK_SIZE];
+//static L4_Word_t user_stack_s[STACK_SIZE];
 
 // Init thread - This function starts up our device drivers and runs the first
 // user program.
@@ -60,7 +60,8 @@ init_thread(void)
 		// Start a new task with this program
 		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(),
 			(void *) L4_SimpleExec_TextVstart(binfo_rec),
-			(void *) &user_stack_s[STACK_SIZE]);
+			(void *) 0x2400000);
+			//(void *) &user_stack_s[STACK_SIZE]);
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
