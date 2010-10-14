@@ -121,7 +121,7 @@ static int bitfield_get(L4_Word_t frame) {
  * @param number_of_bits #bits printed beginning from first
  */
 void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
-	dprintf(0, "Printing Bitfield from %d to %d:\n", first, number_of_bits-1);
+	dprintf(0, "Printing Bitfield from %d to %d:\n", first, first+number_of_bits-1);
 	int i;
 	for(i=0; i<number_of_bits; i++) {
 		dprintf(0, "%d", bitfield_get(start+(first+i)*PAGESIZE));
