@@ -49,10 +49,14 @@ for(int i=0; i<256; i++) {
 #define PHYSICAL_MEMORY_END 0x2000000
 
 #define FIRST_LEVEL_BITS 12
+#define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
+
 #define SECOND_LEVEL_BITS 8
+#define SECOND_LEVEL_ENTRIES (1 << SECOND_LEVEL_BITS)
 
 #define FIRST_LEVEL_INDEX(addr)  ( ((addr) & 0xFFF00000) >> 20 )
 #define SECOND_LEVEL_INDEX(addr) ( ((addr) & 0x000FF000) >> 12 )
+#define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 /** List element used in the first level page table */
 typedef struct page_entry {
@@ -69,7 +73,7 @@ static page_t* first_level_table = NULL;
  * @return page table entry at position `index`
  */
 static page_t* first_level_lookup(L4_Word_t index) {
-	assert(index >= 0 && index < (1 << FIRST_LEVEL_BITS));
+	assert(index >= 0 && index < FIRST_LEVEL_ENTRIES);
 
 	return first_level_table+index;
 }
@@ -82,7 +86,7 @@ static page_t* first_level_lookup(L4_Word_t index) {
  * @return table entry
  */
 static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) {
-	assert(index >= 0 && index < (1 << SECOND_LEVEL_BITS));
+	assert(index >= 0 && index < SECOND_LEVEL_ENTRIES);
 
 	return second_level_table+index;
 }
@@ -159,7 +163,7 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 		page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 		if(second_entry->address == NULL) {
 			second_entry->address = (void*) frame_alloc(); // 4096 byte aligned
-			dprintf(3, "No Frame allocated here. Allocated Physical frame: %X\n", (int) second_entry->address);
+			dprintf(3, "New Frame allocated here. Allocated Physical frame: %X\n", (int) second_entry->address);
 		}
 
 		L4_Fpage_t targetFpage = L4_FpageLog2( ((addr >> 12) << 12) , 12); 	// TODO: curently this is aligned to be a multiple of 4096 bytes
@@ -173,7 +177,7 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 		L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
 
-		dprintf(3, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
+		dprintf(3, "Trying to map virtual address %X with physical %X\n", ((addr >> 12) << 12), (int)second_entry->address);
 
 		if ( !L4_MapFpage(tid, targetFpage, phys) ) {
 			sos_print_error(L4_ErrorCode());
@@ -182,7 +186,34 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 	}
 
+	L4_ThreadId_t tid = L4_GlobalId();
+	pager_unmap_all();
+
 	// Generate Reply message
 	L4_Set_MsgMsgTag(msgP, L4_Niltag);
 	L4_MsgLoad(msgP);
+}
+
+
+void pager_unmap_all(L4_ThreadId_t tid) {
+
+	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
+		void* second_level_table = first_level_lookup(i)->address;
+
+		if(second_level_table != NULL) {
+
+			for(int j=0; j<SECOND_LEVEL_ENTRIES; j++) {
+				if(second_level_lookup(second_level_table, j)->address != NULL) {
+					L4_Word_t addr = CREATE_ADDRESS(i,j);
+					dprintf(3, "need to unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
+					L4_UnmapFpage(tid, L4_FpageLog2(addr , 12));
+				}
+			}
+
+		}
+
+	}
+
+	L4_CacheFlushAll();
+
 }

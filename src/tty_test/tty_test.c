@@ -37,9 +37,6 @@ thread_block(void)
 }
 
 
-static void sos_debug_flush() {
-
-}
 
 #define NPAGES 128
 
