@@ -9,7 +9,7 @@
  * Layout of our virtual address:
  * ------------------------------
  * First Level Table Index	(12 bits) 4096 Entries in 1st level table
- * 2nd Level Table Index 	( 8 bits)  256 Entries per table
+ * 2nd Level Table Index 	( 8 bits)   64  Entries per table
  * Page Index				(12 bits)
  *							=========
  *							 32 bits
@@ -37,13 +37,14 @@ for(int i=0; i<256; i++) {
 #include <l4/misc.h>
 #include <l4/space.h>
 #include <l4/thread.h>
+#include <l4/cache.h>
 
 #include "pager.h"
 #include "frames.h"
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 2
+#define verbose 4
 
 #define PHYSICAL_MEMORY_END 0x2000000
 
@@ -96,19 +97,21 @@ static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) 
 static void create_second_level_table(page_t* first_level_entry) {
 	assert(first_level_entry->address == NULL); // TODO: do we want this?
 
-	first_level_entry->address = malloc(1 << SECOND_LEVEL_BITS); // TODO: we need to care about freeing this later...
+	first_level_entry->address = malloc((1 << SECOND_LEVEL_BITS) * sizeof(page_t) ); // TODO: we need to care about freeing this later...
 	assert(first_level_entry->address != NULL);
 
-	memset(first_level_entry->address, 0, 1 << SECOND_LEVEL_BITS);
+	memset(first_level_entry->address, 0, (1 << SECOND_LEVEL_BITS) * sizeof(page_t));
 }
 
 
 /** Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0. */
 void pager_init() {
-	first_level_table = malloc(1 << FIRST_LEVEL_BITS); // this is never freed but it's ok
+	first_level_table = malloc((1 << FIRST_LEVEL_BITS) * sizeof(page_t)); // this is never freed but it's ok
 	assert(first_level_table != NULL);
 
-	memset(first_level_table, 0, 1 << FIRST_LEVEL_BITS);
+	memset(first_level_table, 0, (1 << SECOND_LEVEL_BITS) * sizeof(page_t));
+
+	L4_CacheFlushAll();
 }
 
 
@@ -140,37 +143,41 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 		if ( !L4_MapFpage(tid, targetFpage, phys) ) {
 			sos_print_error(L4_ErrorCode());
-			printf(" Can't map page at %lx\n", addr);
+			dprintf(0, "Can't map page at %lx\n", addr);
 		}
 	}
 	else { // perform a 2 level page table lookup
 
+		dprintf(3, "Performing first level lookup at index: %d\n", FIRST_LEVEL_INDEX(addr));
 		page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 		if(first_entry->address == NULL) {
+			dprintf(3, "No 2nd Level table exists here. Create one.\n");
 			create_second_level_table(first_entry); // set up new 2nd level page table
 		}
 
+		dprintf(3, "Performing 2nd level lookup at index: %d\n", SECOND_LEVEL_INDEX(addr));
 		page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 		if(second_entry->address == NULL) {
-
 			second_entry->address = (void*) frame_alloc(); // 4096 byte aligned
-			L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12); // 1024 byte aligned
-			L4_Set_Rights(&targetFpage, L4_ReadWriteOnly);
-
-			L4_Word_t aligned_address = addr >> 10; // divide by 1024
-			L4_Word_t frame_offset = aligned_address % 4;
-
-			L4_Word_t mapping_address = (L4_Word_t) ((char*)second_entry->address)+(frame_offset*1024);
-
-			L4_PhysDesc_t phys = L4_PhysDesc(mapping_address, L4_DefaultMemory);
-
-			if ( !L4_MapFpage(tid, targetFpage, phys) ) {
-				sos_print_error(L4_ErrorCode());
-				printf(" Can't map page at %lx\n", addr);
-			}
+			dprintf(3, "No Frame allocated here. Allocated Physical frame: %X\n", (int) second_entry->address);
 		}
-		else {
-			// what to do here? return address?
+
+		L4_Fpage_t targetFpage = L4_FpageLog2( ((addr >> 12) << 12) , 12); 	// TODO: curently this is aligned to be a multiple of 4096 bytes
+																			// is this correct?
+		L4_Set_Rights(&targetFpage, L4_ReadWriteOnly);
+
+		/*L4_Word_t aligned_address = addr >> 10; // divide by 1024
+		L4_Word_t frame_offset = aligned_address % 4;
+		L4_Word_t mapping_address = (L4_Word_t) ((char*)second_entry->address)+(frame_offset*1024);
+		L4_PhysDesc_t phys = L4_PhysDesc(mapping_address, L4_DefaultMemory);*/
+
+		L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
+
+		dprintf(3, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
+
+		if ( !L4_MapFpage(tid, targetFpage, phys) ) {
+			sos_print_error(L4_ErrorCode());
+			dprintf(0, "Can't map page at %lx\n", addr);
 		}
 
 	}
