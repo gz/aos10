@@ -152,12 +152,17 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 		page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 		if(second_entry->address == NULL) {
-			second_entry->address = (void*) frame_alloc();
 
-			L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12);
+			second_entry->address = (void*) frame_alloc(); // 4096 byte aligned
+			L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12); // 1024 byte aligned
 			L4_Set_Rights(&targetFpage, L4_ReadWriteOnly);
 
-			L4_PhysDesc_t phys = L4_PhysDesc( ((L4_Word_t) second_entry->address), L4_DefaultMemory);
+			L4_Word_t aligned_address = addr >> 10; // divide by 1024
+			L4_Word_t frame_offset = aligned_address % 4;
+
+			L4_Word_t mapping_address = (L4_Word_t) ((char*)second_entry->address)+(frame_offset*1024);
+
+			L4_PhysDesc_t phys = L4_PhysDesc(mapping_address, L4_DefaultMemory);
 
 			if ( !L4_MapFpage(tid, targetFpage, phys) ) {
 				sos_print_error(L4_ErrorCode());
