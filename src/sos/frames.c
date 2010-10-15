@@ -21,7 +21,6 @@
 #define verbose 3
 
 #define BITS_PER_CHAR 8
-//#define ALIGN_TO_PAGESIZE(bytes) (((bytes)+PAGESIZE) & ~(PAGESIZE-1))
 
 /** List elements used to maintain a list of the free frames */
 typedef struct frame {
@@ -143,14 +142,11 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 
 	// preconditions
 	assert(low < high);
-	//assert(memsize >= 2*PAGESIZE); // we need at least 2 pages
 	assert(memsize % PAGESIZE == 0); // our code is based on that assumption
 
 	L4_Word_t frame_count = memsize / PAGESIZE;
 	L4_Word_t frame_table_size = frame_count * sizeof(frame_t);
 	L4_Word_t bit_field_size = (frame_count / 8) + 1;
-	//L4_Word_t datastructure_space = ALIGN_TO_PAGESIZE(frame_table_size + bit_field_size);
-	//assert(datastructure_space <= memsize-PAGESIZE); // we need at least one page to manage
 
 	dprintf(2, "Physical Memory starts at address: %d\n", start);
 	dprintf(2, "Physical Memory ends at address: %d\n", end);
@@ -159,10 +155,7 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	dprintf(2, "Frame List Structure size: %d bytes\n", sizeof(frame_t));
 	dprintf(2, "Frame Table Size: %d bytes\n", frame_table_size);
 	dprintf(2, "Bit field size: %d bytes\n",  bit_field_size);
-	//dprintf(2, "Required memory for frame bookkeeping: %d bytes\n",  datastructure_space);
-	//dprintf(2, "Reserved Pages for bookkeeping: %d\n",  datastructure_space / PAGESIZE);
 
-	//frame_stack_start = (frame_t*) start; // lets point our stack to the start
 	frame_stack_start = (frame_t*) malloc(frame_table_size); // this is never freed but it's ok
 	assert(frame_stack_start != NULL);
 	stack_count = 0;
@@ -171,24 +164,15 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	bitfield_start = (char*) malloc(bit_field_size); // this is never freed but it's ok
 	assert(bitfield_start != NULL);
 
-	//start += datastructure_space; // update so we won't overwrite the table
 	dprintf(2, "Physical Frames will start at address: %d\n", start);
 
 	L4_Word_t frame_iter;
-	// initially all frames are free so we add them all on the stack
-	/*for( frame_iter = start; frame_iter < end; frame_iter += PAGESIZE) {
-		frame_stack_add(frame_iter);
-		bitfield_set(frame_iter, 0);
-	}
-	assert(frame_iter == end);*/
-
 	// for better debugging we add the frames in reverse order on the stack
 	// so calls to frame_alloc will return with the first frames first
 	for(frame_iter = end-PAGESIZE; frame_iter >= start; frame_iter -= PAGESIZE) {
 		frame_stack_add(frame_iter);
 		bitfield_set(frame_iter, 0);
 	}
-	//assert(frame_iter == (start-PAGESIZE));
 
 	dprintf(2, "Stack count now is: %d\n", stack_count);
 

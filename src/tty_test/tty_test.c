@@ -39,7 +39,9 @@ thread_block(void)
 int main(void)
 {
     L4_ThreadId_t myid;
-    
+    char stack_space[1024*1024];
+    assert( ((int)&stack_space) > 0x2000000);
+
     /* initialise communication */
     ttyout_init();
     
