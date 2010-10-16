@@ -2,17 +2,37 @@
  * Page Table
  * =============
  * We're having a page size of 4096 bytes which requires us to use a
- * 12 bit offset. Since ARM uses 32bit addresses we can address with
+ * 12 bit offset. Since ARM uses 32 bit addresses we can address with
  * the remaining 20 bits just about 2^20 frames (and since we only have about
  * 5k frames were good).
+ * One page table entry in both 1st and 2nd tables is always 4 byte (type: `page_t`).
+ * Because of our virtual address layout (see below) the page table structure
+ * requires about (2^12 * 4) + (4096 * (2^8 * 4)) bytes = 4 megabytes of space
+ * if our virtual address space would be filled out completely.
+ *
+ * The pager_unmap_all is used for testing the pagetable. It walks through it,
+ * reconstructs all the fpages from the table entries and unmaps them. This can
+ * be called by a given thread through the syscall SOS_UNMAP_ALL.
  *
  * Layout of our virtual address:
  * ------------------------------
  * First Level Table Index	(12 bits) 4096 Entries in 1st level table
  * 2nd Level Table Index 	( 8 bits)   64  Entries per table
- * Page Index				(12 bits)
+ * Page Index				(12 bits) 4095 Bytes offset to address within page
  *							=========
  *							 32 bits
+ *
+ * Layout of our virtual address space:
+ * ------------------------------------
+ * TODO
+ *
+ *
+ *
+ * TODO: IPC Syscall UNMAP_ALL error checking
+ * TODO: What to do is UTCB?
+ * TODO: Initialize heap by calling malloc init
+ * TODO: Figure out a good layout (heap, code, stack).. make sure to set correct permissions
+ * TODO: Is address alignment correct: ((addr << 12) >> 12)?
  *
  */
 
@@ -20,7 +40,7 @@
 void* first_level_table = malloc(4096*4);
 assert(first_level_table != NULL);
 
-for(int i=0; i<256; i++) {
+for(int i=0; i<4096; i++) {
 	void* second_level_table = malloc(256*4);
 	assert(second_level_table);
 }
@@ -191,12 +211,18 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	L4_MsgLoad(msgP);
 }
 
-
+/**
+ * This function unmaps all fpages for a given thread mapped to physical
+ * memory by the pager. And flushes the CPU Cache. This gets called by
+ * the syscall SOS_UNMAP_ALL.
+ *
+ * @param tid thread id to flush
+ */
 void pager_unmap_all(L4_ThreadId_t tid) {
 
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
-		void* second_level_table = first_level_lookup(i)->address;
 
+		void* second_level_table = first_level_lookup(i)->address;
 		if(second_level_table != NULL) {
 
 			for(int j=0; j<SECOND_LEVEL_ENTRIES; j++) {
@@ -208,15 +234,14 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 					if(L4_UnmapFpage(tid, L4_FpageLog2(addr , 12)) == 0) {
 						sos_print_error(L4_ErrorCode());
 						dprintf(0, "Can't unmap page at %lx\n", addr);
-					}
-
-				}
+					} // else success
+				} // else no 2nd level entry here
 			}
 
-		}
+		} // else no 1st level entry here
 
 	}
 
+	// make sure to flush the cache otherwise there might still be some mappings in the cache
 	L4_CacheFlushAll();
-
 }
