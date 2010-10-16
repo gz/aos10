@@ -14,6 +14,7 @@
 
 
 #define SOS_SERIAL_WRITE 1
+#define SOS_UNMAP_ALL 2
 
 
 #endif /* SYSCALLS_H_ */

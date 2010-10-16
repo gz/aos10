@@ -20,6 +20,7 @@
 #include <l4/thread.h>
 
 #include "ttyout.h"
+#include "../sos/syscalls.h"
 
 // Block a thread forever
 static void
@@ -40,6 +41,17 @@ thread_block(void)
 
 #define NPAGES 128
 
+static void sos_debug_flush(void) {
+    L4_Msg_t msg;
+    L4_MsgTag_t tag;
+
+    L4_MsgClear(&msg);
+    L4_Set_MsgLabel(&msg, SOS_UNMAP_ALL << 4);
+	L4_MsgLoad(&msg);
+
+	tag = L4_Send(L4_Pager());
+}
+
 static void do_pt_test( char *buf )
 {
     int i;
@@ -50,7 +62,7 @@ static void do_pt_test( char *buf )
     buf[i * 1024] = i;
 
     /* flush */
-    //sos_debug_flush();
+    sos_debug_flush();
 
     /* check */
     for(i = 0; i < NPAGES; i += 4)

@@ -147,6 +147,11 @@ static __inline__ void syscall_loop(void)
 				sos_serial_send(&msg, &send);
 			break;
 
+			/* our system calls */
+			case SOS_UNMAP_ALL:
+				pager_unmap_all(tid);
+			break;
+
 			/* error? */
 			default:
 				// Unknown system call, so we don't want to reply to this thread

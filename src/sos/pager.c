@@ -186,9 +186,6 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 	}
 
-	L4_ThreadId_t tid = L4_GlobalId();
-	pager_unmap_all();
-
 	// Generate Reply message
 	L4_Set_MsgMsgTag(msgP, L4_Niltag);
 	L4_MsgLoad(msgP);
@@ -204,9 +201,15 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 
 			for(int j=0; j<SECOND_LEVEL_ENTRIES; j++) {
 				if(second_level_lookup(second_level_table, j)->address != NULL) {
+
 					L4_Word_t addr = CREATE_ADDRESS(i,j);
 					dprintf(3, "need to unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
-					L4_UnmapFpage(tid, L4_FpageLog2(addr , 12));
+
+					if(L4_UnmapFpage(tid, L4_FpageLog2(addr , 12)) == 0) {
+						sos_print_error(L4_ErrorCode());
+						dprintf(0, "Can't unmap page at %lx\n", addr);
+					}
+
 				}
 			}
 
