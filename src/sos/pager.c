@@ -7,7 +7,7 @@
  * 5k frames were good).
  * One page table entry in both 1st and 2nd tables is always 4 byte (type: `page_t`).
  * Because of our virtual address layout (see below) the page table structure
- * requires about (2^12 * 4) + (4096 * (2^8 * 4)) bytes = 4 megabytes of space
+ * requires about (2^12 * 4) + (2^12 * (2^8 * 4)) bytes = 4 megabytes of space
  * if our virtual address space would be filled out completely.
  *
  * The pager_unmap_all is used for testing the pagetable. It walks through it,
