@@ -10,7 +10,7 @@
  * requires about (2^12 * 4) + (2^12 * (2^8 * 4)) bytes = 4 megabytes of space
  * if our virtual address space would be filled out completely.
  *
- * The pager_unmap_all is used for testing the pagetable. It walks through it,
+ * The pager_unmap_all is used for testing the page table. It walks through it,
  * reconstructs all the fpages from the table entries and unmaps them. This can
  * be called by a given thread through the syscall SOS_UNMAP_ALL.
  *
