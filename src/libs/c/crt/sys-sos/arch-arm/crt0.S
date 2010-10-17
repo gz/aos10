@@ -86,6 +86,11 @@
         .code   32
 BEGIN_PROC(_start)
         bl      __L4_Init
+
+    	mov		r0, #67108864   // 0x4000000
+    	mov		r1, #134217728  // 0x8000000
+		bl		__malloc_init
+
         bl      main
         bl      exit
 END_PROC(_start)

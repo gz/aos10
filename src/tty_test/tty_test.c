@@ -73,15 +73,15 @@ static void pt_test( void )
 {
 	if(1) {
     /* need a decent sized stack */
-    char buf1[NPAGES * 1024];//, *buf2 = NULL;
+    char buf1[NPAGES * 1024], *buf2 = NULL;
 
     /* check the stack is above phys mem */
     assert((void *) buf1 > (void *) 0x2000000);
 
     /* stack test */
-    do_pt_test(buf1);
+    //do_pt_test(buf1);
 
-    /* heap test
+    /* heap test */
     buf2 = malloc(NPAGES * 1024);
     assert(buf2);
 
@@ -89,7 +89,7 @@ static void pt_test( void )
     assert((void *) buf2 > (void *) 0x2000000);
 
     do_pt_test(buf2);
-    free(buf2); */
+    free(buf2);
 	}
 }
 
@@ -99,6 +99,8 @@ int main(void)
 {
 
 	pt_test();
+
+	//*(char *) 0x30000000 = 123;
 
 	/* initialise communication */
     ttyout_init();

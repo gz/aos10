@@ -57,7 +57,7 @@ static void init_thread(void)
 		dprintf(0, "Found exec: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
 
 		// Start a new task with this program
-		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0x80000000);
+		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0xC0000000);
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
