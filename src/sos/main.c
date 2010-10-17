@@ -40,8 +40,7 @@ static L4_Word_t init_stack_s[STACK_SIZE];
 
 // Init thread - This function starts up our device drivers and runs the first
 // user program.
-static void
-init_thread(void)
+static void init_thread(void)
 {
     // Initialise the network for libsos_logf_init
     network_init();
@@ -58,10 +57,7 @@ init_thread(void)
 		dprintf(0, "Found exec: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
 
 		// Start a new task with this program
-		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(),
-			(void *) L4_SimpleExec_TextVstart(binfo_rec),
-			(void *) 0x2700000);
-			//(void *) &user_stack_s[STACK_SIZE]);
+		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0x80000000);
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
@@ -162,33 +158,28 @@ static __inline__ void syscall_loop(void)
     }
 }
 
-//
-// Main entry point - called by crt.
-//
 
-int
-main (void)
+/** Main entry point - called by crt. */
+int main(void)
 {
-    // Initialise initial sos environment
+    // Initialize initial sos environment
     libsos_init();
-
-    // Initialse the memory frame table
 
     // Find information about available memory
     L4_Word_t low, high;
     sos_find_memory(&low, &high);
-    dprintf(0, "Available memory from 0x%08lx to 0x%08lx - %luMB\n", 
-	   low, high, (high - low) / ONE_MEG);
+    dprintf(0, "Available memory from 0x%08lx to 0x%08lx - %luMB\n", low, high, (high - low) / ONE_MEG);
 
-    frame_init((low + HEAP_SIZE), high); // Initialise the frame table
+    // Initialize memory management
+    frame_init((low + HEAP_SIZE), high);
     pager_init();
 
     // Spawn the setup thread which completes the rest of the initialisation,
     // leaving this thread free to act as a pager and interrupt handler.
-    (void) sos_thread_new(&init_thread, &init_stack_s[STACK_SIZE]);
+    sos_thread_new(&init_thread, &init_stack_s[STACK_SIZE]);
 
-    syscall_loop(); // Enter the syscall loop
+    syscall_loop();
+
     /* Not reached */
-
     return 0;
 }

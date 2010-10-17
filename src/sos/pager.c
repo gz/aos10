@@ -17,22 +17,27 @@
  * Layout of our virtual address:
  * ------------------------------
  * First Level Table Index	(12 bits) 4096 Entries in 1st level table
- * 2nd Level Table Index 	( 8 bits)   64  Entries per table
+ * 2nd Level Table Index 	( 8 bits)  256  Entries per table
  * Page Index				(12 bits) 4095 Bytes offset to address within page
  *							=========
  *							 32 bits
  *
  * Layout of our virtual address space:
  * ------------------------------------
- * TODO
+ *      [[      TEXT      |      DATA      |      HEAP       |      STACK      ]]
+ * 0x02000000                         0x40000000                           0xC0000000
+ *
+ * This layout uses ~2GB (0x7FFFFFFF) for the heap & stack, ~992 MB
+ * (0x40000000 - 0x2000000) for the code and data part. The upper part
+ * (0xBFFFFFFF - 0xFFFFFFFF) ~1GB is not used at the moment.
  *
  *
- *
- * TODO: IPC Syscall UNMAP_ALL error checking
- * TODO: What to do is UTCB?
  * TODO: Initialize heap by calling malloc init
+ * TODO: IPC Syscall UNMAP_ALL error checking
+ * TODO: What to do with UTCB?
  * TODO: Figure out a good layout (heap, code, stack).. make sure to set correct permissions
  * TODO: Is address alignment correct: ((addr << 12) >> 12)?
+ * TODO: make pager method smaller (function: map_pagetable, map_one_to_one ...)
  *
  */
 
@@ -66,7 +71,10 @@ for(int i=0; i<4096; i++) {
 
 #define verbose 4
 
-#define PHYSICAL_MEMORY_END 0x2000000
+#define VIRTUAL_START 0x2000000
+#define STACK_TOP 0xC0000000
+#define HEAP_START 0x40000000
+
 
 #define FIRST_LEVEL_BITS 12
 #define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
@@ -87,6 +95,47 @@ static page_t* first_level_table = NULL;
 
 
 /**
+ * Gets access rights for a given thread at a certain memory location.
+ *
+ * @param tid ID of the thread
+ * @param addr Location we wan't to know the access rights
+ * @return 3 bits set/unset depending on read write exec access (refer to l4/types.h)
+ */
+static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
+
+	if(tid.raw == L4_Myself().raw) // no restrictions for the root server
+		return L4_FullyAccessible;
+
+	if(addr < VIRTUAL_START) // TODO: when we support ELF change this to L4_NoAccess
+		return L4_FullyAccessible;
+
+	if(addr >= VIRTUAL_START && addr < HEAP_START)
+		return L4_ReadeXecOnly;
+
+	if(addr >= HEAP_START && addr < STACK_TOP)
+		return L4_ReadWriteOnly;
+
+	if(addr >= STACK_TOP)
+		return L4_ReadWriteOnly;
+
+	return L4_FullyAccessible;
+}
+
+
+/**
+ * Checks if a given thread has the access he requests for a certain memory region.
+ *
+ * @param tid ID of the requesting thread
+ * @param addr Memory location he's requesting
+ * @param tried_access type of access he wants for the given location
+ * @return 1 if he's allowed to access, 0 otherwise
+ */
+inline static L4_Bool_t is_access_granted(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t tried_access) {
+	return (tried_access & get_access_rights(tid, addr)) == tried_access;
+}
+
+
+/**
  * Performs a lookup in the first level page table.
  *
  * @param index where to look at
@@ -97,6 +146,7 @@ static page_t* first_level_lookup(L4_Word_t index) {
 
 	return first_level_table+index;
 }
+
 
 /**
  * Performs a lookup in a second level page table.
@@ -110,6 +160,7 @@ static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) 
 
 	return second_level_table+index;
 }
+
 
 /**
  * Reserve space for 2nd level page table and point the corresponding
@@ -156,8 +207,13 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 	dprintf(1, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
 
-	// For addresses below PHYSICAL_MEMORY_END we just do 1 to 1 mapping of addresses
-	if(addr <= PHYSICAL_MEMORY_END) {
+	if(!is_access_granted(tid, addr, fault_reason)) {
+		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X but it only has rights 0x%X in this region.", tid, addr, fault_reason, get_access_rights(tid, addr));
+		L4_KDB_Enter("panic");
+	}
+
+	// For addresses below VIRTUAL_START we just do 1 to 1 mapping of addresses
+	if(addr < VIRTUAL_START) {
 		// Construct fpage IPC message
 		L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12);
 		L4_Set_Rights(&targetFpage, L4_FullyAccessible);
@@ -211,6 +267,7 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	L4_MsgLoad(msgP);
 }
 
+
 /**
  * This function unmaps all fpages for a given thread mapped to physical
  * memory by the pager. And flushes the CPU Cache. This gets called by
@@ -245,3 +302,4 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 	// make sure to flush the cache otherwise there might still be some mappings in the cache
 	L4_CacheFlushAll();
 }
+
