@@ -87,8 +87,8 @@
 BEGIN_PROC(_start)
         bl      __L4_Init
 
-    	mov		r0, #67108864   // 0x4000000 heap start (see pager.c)
-    	mov		r1, #134217728  // 0x8000000 stack top (see pager.c)
+    	mov		r0, #0x40000000  // heap start (see pager.c)
+    	mov		r1, #0x80000000  // heap end (see pager.c)
 		bl		__malloc_init
 
         bl      main

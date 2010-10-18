@@ -25,16 +25,13 @@
  * Layout of our virtual address space:
  * ------------------------------------
  *      [[      TEXT      |      DATA      |      HEAP       |      STACK      ]]
- * 0x02000000                         0x40000000                           0xC0000000
+ * 0x02000000                         0x40000000        0x80000000        0xC0000000
  *
  *
  *
- * TODO: Initialize heap by calling malloc init
  * TODO: IPC Syscall UNMAP_ALL error checking
  * TODO: What to do with UTCB?
- * TODO: Figure out a good layout (heap, code, stack).. make sure to set correct permissions
  * TODO: Is address alignment correct: ((addr << 12) >> 12)?
- * TODO: make pager method smaller (function: map_pagetable, map_one_to_one ...)
  *
  */
 
@@ -44,7 +41,7 @@ assert(first_level_table != NULL);
 
 for(int i=0; i<4096; i++) {
 	void* second_level_table = malloc(256*4);
-	assert(second_level_table);
+	assert(second_level_table != NULL);
 }
 */
 
@@ -66,7 +63,7 @@ for(int i=0; i<4096; i++) {
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 4
+#define verbose 0
 
 #define VIRTUAL_START 0x2000000
 #define STACK_TOP 0xC0000000
@@ -79,8 +76,8 @@ for(int i=0; i<4096; i++) {
 #define SECOND_LEVEL_BITS 8
 #define SECOND_LEVEL_ENTRIES (1 << SECOND_LEVEL_BITS)
 
-#define FIRST_LEVEL_INDEX(addr)  ( ((addr) & 0xFFF00000) >> 20 )
-#define SECOND_LEVEL_INDEX(addr) ( ((addr) & 0x000FF000) >> 12 )
+#define FIRST_LEVEL_INDEX(addr)  ( (((addr) & 0xFFF00000) >> 20) & 0xFFF )
+#define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 /** List element used in the first level page table */
@@ -154,7 +151,6 @@ static page_t* first_level_lookup(L4_Word_t index) {
  */
 static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) {
 	assert(index >= 0 && index < SECOND_LEVEL_ENTRIES);
-
 	return second_level_table+index;
 }
 
@@ -169,10 +165,10 @@ static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) 
 static void create_second_level_table(page_t* first_level_entry) {
 	assert(first_level_entry->address == NULL); // TODO: do we want this?
 
-	first_level_entry->address = malloc((1 << SECOND_LEVEL_BITS) * sizeof(page_t) ); // TODO: we need to care about freeing this later...
+	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_t)); // TODO: we need to care about freeing this later...
 	assert(first_level_entry->address != NULL);
 
-	memset(first_level_entry->address, 0, (1 << SECOND_LEVEL_BITS) * sizeof(page_t));
+	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_t));
 }
 
 
@@ -180,10 +176,10 @@ static void create_second_level_table(page_t* first_level_entry) {
  * Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0.
  */
 void pager_init() {
-	first_level_table = malloc((1 << FIRST_LEVEL_BITS) * sizeof(page_t)); // this is never freed but it's ok
+	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_t)); // this is never freed but it's ok
 	assert(first_level_table != NULL);
 
-	memset(first_level_table, 0, (1 << SECOND_LEVEL_BITS) * sizeof(page_t));
+	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_t));
 
 	L4_CacheFlushAll();
 }
@@ -215,11 +211,9 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  *
  * @param tid ID of thread to map for
  * @param addr Memory range to map
- * @return 0/1 based on the success/failure of MapFpage syscall
+ * @return 0/1 based on the success/failure of MapFpage syscall or lack of available memory.
  */
 static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
-
-	dprintf(3, "Performing first level lookup at index: %d\n", FIRST_LEVEL_INDEX(addr));
 
 	page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL) {
@@ -227,14 +221,18 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 		create_second_level_table(first_entry); // set up new 2nd level page table
 	}
 
-	dprintf(3, "Performing 2nd level lookup at index: %d\n", SECOND_LEVEL_INDEX(addr));
 	page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 	if(second_entry->address == NULL) {
-		second_entry->address = (void*) frame_alloc(); // 4096 byte aligned
-		dprintf(3, "New Frame allocated here. Allocated Physical frame: %X\n", (int) second_entry->address);
+
+		if((second_entry->address = (void*) frame_alloc()) == NULL) {
+			return 0;
+		}
+
+		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
 
-	L4_Fpage_t targetFpage = L4_FpageLog2( ((addr >> 12) << 12) , 12); 	// TODO: curently this is aligned to be a multiple of 4096 bytes.. correct?
+ 	// TODO: currently this is aligned to be a multiple of 4096 bytes.. correct?
+	L4_Fpage_t targetFpage = L4_FpageLog2(((addr >> 12) << 12) , 12);
 	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
 
 	L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
@@ -259,27 +257,28 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
     L4_Word_t ip = L4_MsgWord(msgP, 1);
     L4_Word_t fault_reason = L4_Label(msgP->tag) & 0xF; // permissions are stored in lower 4 bit of label
 
-	dprintf(3, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
+	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
 
 	if(!is_access_granted(tid, addr, fault_reason)) {
 		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.", tid, addr, fault_reason, get_access_rights(tid, addr));
 		L4_KDB_Enter("panic");
 	}
 
-	// For addresses below VIRTUAL_START we just do 1 to 1 mapping of addresses
 	if(addr < VIRTUAL_START) {
 
+		// For addresses below VIRTUAL_START we just do 1 to 1 mapping of addresses
 		if (!one_to_one_mapping(tid, addr)) {
 			sos_print_error(L4_ErrorCode());
 			dprintf(0, "Can't map page at %lx\n", addr);
 		}
 
 	}
-	else { // perform a 2 level page table lookup
+	else {
 
+		// perform a 2 level page table lookup
 		if (!virtual_mapping(tid, addr)) {
 			sos_print_error(L4_ErrorCode());
-			dprintf(0, "Can't map page at %lx\n", addr);
+			dprintf(0, "Can't map page at %lx. Either MapFpage failed or you're out of memory.\n", addr);
 		}
 
 	}

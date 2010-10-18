@@ -146,6 +146,7 @@ static __inline__ void syscall_loop(void)
 			/* our system calls */
 			case SOS_UNMAP_ALL:
 				pager_unmap_all(tid);
+				send = 0;
 			break;
 
 			/* error? */
