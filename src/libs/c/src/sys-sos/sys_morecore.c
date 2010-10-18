@@ -88,10 +88,13 @@ extern Header  *_kr_malloc_freep;
 extern struct mutex malloc_mutex;
 #endif /* MALLOC_LOCKED */
 
-#define MALLOC_AREA_SIZE 0x100000
-char __malloc_area[MALLOC_AREA_SIZE];
-uintptr_t __malloc_bss = (uintptr_t) &__malloc_area;
-uintptr_t __malloc_top = (uintptr_t) &__malloc_area[MALLOC_AREA_SIZE];
+//#define MALLOC_AREA_SIZE 0x100000
+//char __malloc_area[MALLOC_AREA_SIZE];
+//uintptr_t __malloc_bss = (uintptr_t) &__malloc_area;
+//uintptr_t __malloc_top = (uintptr_t) &__malloc_area[MALLOC_AREA_SIZE];
+uintptr_t __malloc_bss = 0;
+uintptr_t __malloc_top = 0;
+
 
 void
 __malloc_init(void *bss_p, void *top_p)

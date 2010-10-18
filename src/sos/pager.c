@@ -29,11 +29,11 @@
  *
  *
  *
+ * TODO: Is address alignment correct: ((addr << 12) >> 12)?
  * TODO: IPC Syscall UNMAP_ALL error checking
  * TODO: What to do with UTCB?
- * TODO: Is address alignment correct: ((addr << 12) >> 12)?
  *
- */
+ **/
 
 /** Small test to see if we have enough heap
 void* first_level_table = malloc(4096*4);
