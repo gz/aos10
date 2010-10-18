@@ -17,8 +17,8 @@
  * Layout of our virtual address:
  * ------------------------------
  * First Level Table Index	(12 bits) 4096 Entries in 1st level table
- * 2nd Level Table Index 	( 8 bits)  256  Entries per table
- * Page Index				(12 bits) 4095 Bytes offset to address within page
+ * 2nd Level Table Index 	( 8 bits)  256 Entries per table
+ * Page Index				(12 bits) 4096 Bytes offset to address within page
  *							=========
  *							 32 bits
  *
