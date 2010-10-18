@@ -165,16 +165,15 @@ static __inline__ void syscall_loop(void)
 /** Main entry point - called by crt. */
 int main(void)
 {
-    libsos_init();
+    // Initialize initial sos environment
+	libsos_init();
 
+    // Find information about available memory
     L4_Word_t low, high;
     sos_find_memory(&low, &high);
 
 	__malloc_init((void*) low, (void*) ((low + HEAP_SIZE)-1));
 
-    // Initialize initial sos environment
-
-    // Find information about available memory
     dprintf(0, "Available memory from 0x%08lx to 0x%08lx - %luMB\n", low, high, (high - low) / ONE_MEG);
 
     // Initialize memory management

@@ -27,9 +27,15 @@
  *      [[      TEXT      |      DATA      |      HEAP       |      STACK      ]]
  * 0x02000000                         0x40000000        0x80000000        0xC0000000
  *
+ * Limitations:
+ * ------------------------------------
+ * The boundaries for code heap, stack area are static. This limits the max size of the
+ * various areas:
+ * Max Heap Size:  1024 MB
+ * Max Stack Size: 1024 MB
+ * Max Binary Size: 992 MB
  *
  *
- * TODO: Is address alignment correct: ((addr << 12) >> 12)?
  * TODO: IPC Syscall UNMAP_ALL error checking
  * TODO: What to do with UTCB?
  *
