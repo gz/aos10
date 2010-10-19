@@ -24,20 +24,25 @@
  *
  * Layout of our virtual address space:
  * ------------------------------------
- *      [[      TEXT      |      DATA      |      HEAP       |      STACK      ]]
- * 0x02000000                         0x40000000        0x80000000        0xC0000000
+ *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  Reserved  ]]
+ * 0x02000000         0x40000000                      0xC0000000
  *
  * Limitations:
  * ------------------------------------
- * The boundaries for code heap, stack area are static. This limits the max size of the
- * various areas:
- * Max Heap Size:  1024 MB
- * Max Stack Size: 1024 MB
- * Max Binary Size: 992 MB
+ * The boundaries for code heap, stack area are static. We implemented have
+ * the following limits for the heap/stack size:
+ *
+ * Max Heap Size:     4 MB
+ * Max Stack Size:    1 MB
+ * Max Binary Size: 992 MB [Not used now, will get smaller later]
  *
  *
  * TODO: IPC Syscall UNMAP_ALL error checking
  * TODO: What to do with UTCB?
+ *
+ * QUESTION: Implement multiple pagetables (i.e. one per thread id)?
+ * QUESTION: Mechanism to free the page table for finished tasks?
+ * QUESTION: Address layout dynamic?
  *
  **/
 
@@ -69,16 +74,19 @@ for(int i=0; i<4096; i++) {
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 0
+#define verbose 1
 
+// Virtual address space layout constants
+#define ONE_MEGABYTE (1024*1024)
 #define VIRTUAL_START 0x2000000
 #define STACK_TOP 0xC0000000
+#define STACK_END (STACK_TOP - ONE_MEGABYTE)
 #define HEAP_START 0x4000000
+#define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
 
-
+// Page table Macros and constants
 #define FIRST_LEVEL_BITS 12
 #define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
-
 #define SECOND_LEVEL_BITS 8
 #define SECOND_LEVEL_ENTRIES (1 << SECOND_LEVEL_BITS)
 
@@ -103,22 +111,27 @@ static page_t* first_level_table = NULL;
  */
 static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 
-	if(tid.raw == L4_Myself().raw) // no restrictions for the root server
-		return L4_FullyAccessible;
+	// Root server permissions (only physical memory)
+	if(tid.raw == L4_Myself().raw) {
+		if(addr < VIRTUAL_START)
+			return L4_FullyAccessible;
+		else
+			return L4_NoAccess;
+	}
 
-	if(addr < VIRTUAL_START) // TODO: when we support ELF change this to L4_NoAccess
-		return L4_FullyAccessible;
+	// User space physical memory permission
+	if(addr < VIRTUAL_START)
+		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
 
-	if(addr >= VIRTUAL_START && addr < HEAP_START)
-		return L4_ReadeXecOnly;
-
-	if(addr >= HEAP_START && addr < STACK_TOP)
+	// Heap permissions
+	if(addr >= HEAP_START && addr < HEAP_END)
 		return L4_ReadWriteOnly;
 
-	if(addr >= STACK_TOP)
+	// Stack permissions
+	if(addr > STACK_END  && addr <= STACK_TOP)
 		return L4_ReadWriteOnly;
 
-	return L4_FullyAccessible;
+	return L4_NoAccess;
 }
 
 
@@ -233,7 +246,6 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
 			return 0;
 		}
-
 		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
 
@@ -244,7 +256,6 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 	L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
 
 	dprintf(3, "Trying to map virtual address %X with physical %X\n", ((addr >> 12) << 12), (int)second_entry->address);
-
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
@@ -263,10 +274,10 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
     L4_Word_t ip = L4_MsgWord(msgP, 1);
     L4_Word_t fault_reason = L4_Label(msgP->tag) & 0xF; // permissions are stored in lower 4 bit of label
 
-	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
+	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid.global.X.thread_no, ip, addr, fault_reason);
 
 	if(!is_access_granted(tid, addr, fault_reason)) {
-		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.", tid, addr, fault_reason, get_access_rights(tid, addr));
+		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.\n", tid, addr, fault_reason, get_access_rights(tid, addr));
 		L4_KDB_Enter("panic");
 	}
 
@@ -284,7 +295,7 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 		// perform a 2 level page table lookup
 		if (!virtual_mapping(tid, addr)) {
 			sos_print_error(L4_ErrorCode());
-			dprintf(0, "Can't map page at %lx. Either MapFpage failed or you're out of memory.\n", addr);
+			dprintf(0, "Can't map page at %lx. Either MapFpage failed or we're out of memory.\n", addr);
 		}
 
 	}
@@ -313,7 +324,7 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 				if(second_level_lookup(second_level_table, j)->address != NULL) {
 
 					L4_Word_t addr = CREATE_ADDRESS(i,j);
-					dprintf(3, "need to unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
+					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
 
 					if(L4_UnmapFpage(tid, L4_FpageLog2(addr , 12)) == 0) {
 						sos_print_error(L4_ErrorCode());
@@ -327,6 +338,28 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 	}
 
 	// make sure to flush the cache otherwise there might still be some mappings in the cache
+	L4_CacheFlushAll();
+}
+
+
+/**
+ * Frees the allocated space for the pagetable for a given thread.
+ * This should be called after a thread is finished.
+ *
+ * @param tid thread id
+ */
+void pager_free_all(L4_ThreadId_t tid) {
+
+	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
+
+		void* second_level_table = first_level_lookup(i)->address;
+		if(second_level_table != NULL) {
+			free(second_level_table);
+		}
+
+	}
+	//free(first_level_table); TODO
+
 	L4_CacheFlushAll();
 }
 

@@ -50,14 +50,14 @@ static void sos_debug_flush(void) {
 
 
 
-#define NPAGES 1024
+#define NPAGES 128
 static void do_pt_test( char *buf )
 {
     int i;
 
     /* set */
     for(i = 0; i < NPAGES; i += 4) {
-    	((L4_Word_t*)buf)[i * 1024] = i;
+    	buf[i * 1024] = i;
     }
 
     /* flush */
@@ -65,7 +65,7 @@ static void do_pt_test( char *buf )
 
     /* check */
     for(i = 0; i < NPAGES; i += 4) {
-    	assert(((L4_Word_t*)buf)[i*1024] == i);
+    	assert(buf[i*1024] == i);
     }
 }
 
@@ -80,7 +80,7 @@ static void pt_test( void )
     /* stack test */
     do_pt_test(buf1);
 
-
+if(0) {
 	char *buf2 = NULL;
     /* heap test */
     buf2 = malloc(NPAGES * 1024);
@@ -91,6 +91,7 @@ static void pt_test( void )
 
     do_pt_test(buf2);
     free(buf2);
+}
 }
 
 
