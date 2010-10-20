@@ -38,9 +38,9 @@
  *
  *
  * TODO: IPC Syscall UNMAP_ALL error checking
- * TODO: What to do with UTCB?
+ * TODO: What to do with UTCB
  *
- * QUESTION: Implement multiple pagetables (i.e. one per thread id)?
+ * QUESTION: Implement multiple page tables (i.e. one per thread id)?
  * QUESTION: Mechanism to free the page table for finished tasks?
  * QUESTION: Address layout dynamic?
  *

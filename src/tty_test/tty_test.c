@@ -105,8 +105,6 @@ int main(void)
 
     pt_test();
 
-
-
 	/* initialise communication */
 
 
