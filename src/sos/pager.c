@@ -24,7 +24,7 @@
  *
  * Layout of our virtual address space:
  * ------------------------------------
- *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess (UTCB region etc.)  ]]
+ *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess (UTCB etc.)  ]]
  * 0x02000000         0x40000000                      0xC0000000
  *
  * Limitations:
@@ -177,9 +177,9 @@ static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) 
  * @param first_level_entry
  */
 static void create_second_level_table(page_t* first_level_entry) {
-	assert(first_level_entry->address == NULL); // TODO: do we want this?
+	assert(first_level_entry->address == NULL);
 
-	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_t)); // TODO: we need to care about freeing this later...
+	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_t));
 	assert(first_level_entry->address != NULL);
 
 	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_t));
@@ -303,12 +303,14 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 /**
  * This function unmaps all fpages for a given thread mapped to physical
- * memory by the pager. And flushes the CPU Cache. This gets called by
+ * memory by the pager. And flushes the CPU Cache. It gets called by
  * the syscall SOS_UNMAP_ALL.
  *
  * @param tid thread id to flush
  */
 void pager_unmap_all(L4_ThreadId_t tid) {
+
+	// TODO: select first level table based on tid
 
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
 
@@ -345,6 +347,8 @@ void pager_unmap_all(L4_ThreadId_t tid) {
  */
 void pager_free_all(L4_ThreadId_t tid) {
 
+	// TODO: select 1st level table based on tid
+
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
 
 		void* second_level_table = first_level_lookup(i)->address;
@@ -353,7 +357,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 		}
 
 	}
-	//free(first_level_table); TODO
+	//TODO: free(first_level_table);
 
 	L4_CacheFlushAll();
 }
