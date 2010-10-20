@@ -24,7 +24,7 @@
  *
  * Layout of our virtual address space:
  * ------------------------------------
- *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess (UTCB etc.)  ]]
+ *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess  ]]
  * 0x02000000         0x40000000                      0xC0000000
  *
  * Limitations:
