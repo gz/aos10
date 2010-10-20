@@ -49,8 +49,7 @@ static L4_Word_t utcb_base_s;
 static L4_Word_t last_thread_s;
 
 /* Initialise the L4 Environment library */
-int
-libsos_init(void)
+int libsos_init(void)
 {
     // Find out my ID
     root_thread_g = L4_Myself();

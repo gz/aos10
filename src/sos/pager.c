@@ -24,7 +24,7 @@
  *
  * Layout of our virtual address space:
  * ------------------------------------
- *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  Reserved  ]]
+ *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess (UTCB region etc.)  ]]
  * 0x02000000         0x40000000                      0xC0000000
  *
  * Limitations:
@@ -37,12 +37,7 @@
  * Max Binary Size: 992 MB [Not used now, will get smaller later]
  *
  *
- * TODO: IPC Syscall UNMAP_ALL error checking
  * TODO: What to do with UTCB
- *
- * QUESTION: Implement multiple page tables (i.e. one per thread id)?
- * QUESTION: Mechanism to free the page table for finished tasks?
- * QUESTION: Address layout dynamic?
  *
  **/
 
@@ -74,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 1
+#define verbose 3
 
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)
@@ -343,7 +338,7 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 
 
 /**
- * Frees the allocated space for the pagetable for a given thread.
+ * Frees the allocated space for the page table for a given thread.
  * This should be called after a thread is finished.
  *
  * @param tid thread id

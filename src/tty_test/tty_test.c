@@ -23,8 +23,7 @@
 #include "../sos/syscalls.h"
 
 // Block a thread forever
-static void
-thread_block(void)
+static void thread_block(void)
 {
     L4_Msg_t msg;
 
@@ -46,6 +45,12 @@ static void sos_debug_flush(void) {
 	L4_MsgLoad(&msg);
 
 	tag = L4_Send(L4_Pager());
+
+	if (L4_IpcFailed(tag)) {
+		L4_Word_t err = L4_ErrorCode();
+		printf("sos_debug_flush failed (error: %lx)\n", err);
+	}
+
 }
 
 
@@ -98,20 +103,20 @@ if(0) {
 
 int main(void)
 {
+	/* initialise communication */
     ttyout_init();
 
     // invalid access:
 	//*(char *) 0x30000000 = 123;
-
     pt_test();
-
-	/* initialise communication */
 
 
 	L4_ThreadId_t myid;
     /*assert( ((int)&stack_space) > 0x2000000);
     stack_space[0] = 'a';
     stack_space[1025] = 'b';
+    //L4_Word_t utcb_location = (L4_Word_t) L4_GetUtcbBase();
+    //printf("utcb is at: %ud", utcb_location);
 
     printf("stack addr: %X\n", (int)&stack_space);*/
 
