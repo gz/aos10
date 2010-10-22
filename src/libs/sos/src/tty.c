@@ -123,9 +123,9 @@ size_t sos_read(void *vData, long int position, size_t count, void *handle) {
 	}
 	// copy the last word in parts
 	if (to_copy > 0) {
-		char minibuf[4];
+		L4_Word_t minibuf;
 		minibuf = L4_MsgWord(&msg, i);
-		memcpy(ptr,minibuf,to_copy);
+		memcpy(ptr,&minibuf,to_copy);
 	}
 
 	return min(received,count);
