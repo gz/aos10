@@ -8,7 +8,8 @@
 
 #include <l4/message.h>
 
-void sos_serial_send(L4_Msg_t* msg_p, int* send_p);
+void sos_serial_send(L4_Msg_t* msg_p);
+//void sos_serial_recieve(L4_Msg_t* msg_p, int* send_p);
 
 
 #endif /* SOS_SERIAL_H_ */

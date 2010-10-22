@@ -9,7 +9,7 @@
 #include <l4/kdebug.h>
 #include <l4/ipc.h>
 
-#include "syscalls.h"
+#include "../sos/syscalls.h"
 
 
 #define MSG_WORD_SIZE 4
@@ -59,12 +59,21 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
         L4_Set_MsgLabel(&msg, SOS_SERIAL_WRITE << 4);
     	L4_MsgLoad(&msg);
 
-		// TODO: check for error
-    	tag = L4_Send(sSystemId);
+		// send message to root server and wait for reply
+    	tag = L4_Call(sSystemId);
 
+    	// check if ipc failed
     	if(L4_IpcFailed(tag))
     		return to_send;
         
+    	// get reply message, should be one word containing the number of written chars
+    	assert(L4_UntypedWords(tag) == 1);
+    	int sent = L4_MsgWord(&msg, 0);
+
+    	// check if all chars have been written to sos_serial
+    	if(to_send != sent)
+    		return sent;
+
         not_sent_count -= to_send;
 
     }

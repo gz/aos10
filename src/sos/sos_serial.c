@@ -20,7 +20,7 @@ static struct serial* ser = NULL;
  * @param msg_p pointer to the IPC message
  *
  */
-void sos_serial_send(L4_Msg_t* msg_p, int* send_p) {
+void sos_serial_send(L4_Msg_t* msg_p) {
 	dprintf(1, "received SOS_SERIAL_WRITE\n");
 
 	if(ser == NULL)
@@ -44,19 +44,25 @@ void sos_serial_send(L4_Msg_t* msg_p, int* send_p) {
 	char* message_ptr = (char*) &write_buffer;
 
 	// sending to serial
-	do {
+	for (int i=0; i < 20; i++) {
 		sent = serial_send(ser, message_ptr, len-total_sent);
 		message_ptr += sent;
 
 		total_sent += sent;
 
+		// In case we send faster than our serial driver allows we
+		// retry until all data is sent or at most 20 times.
 		if(total_sent < len) {
 			dprintf(0, "sos_serial_send: serial driver's internal buffer fills faster than it can actually output data");
 		}
+		else {
+			// everything sent, can exit loop
+			break;
+		}
+	}
 
-	// In case we send faster than our serial driver allows we
-	// retry until all data is sent.
-	} while( total_sent < len);
-
-	*send_p = 0;
+	// send the number of written chars back to the user thread
+    L4_MsgClear(msg_p);
+    L4_MsgAppendWord(msg_p, total_sent);
+    L4_MsgLoad(msg_p);
 }

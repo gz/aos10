@@ -142,7 +142,7 @@ static __inline__ void syscall_loop(void)
 			/* our system calls */
 			case SOS_SERIAL_WRITE:
 				assert(L4_UntypedWords(tag) == 5); // make sure there were 5 registers filled with stuff
-				sos_serial_send(&msg, &send);
+				sos_serial_send(&msg);
 			break;
 
 			/* our system calls */
