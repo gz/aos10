@@ -47,6 +47,9 @@ static void init_thread(void)
     // Initialise the network for libsos_logf_init
     network_init();
 
+	sos_serial_init();
+
+
     // Loop through the BootInfo starting executables
     int i;
     L4_Word_t task = 0;
@@ -99,6 +102,7 @@ static __inline__ void syscall_loop(void)
     L4_ThreadId_t tid = L4_nilthread;
 
     for (;;) {
+
 		L4_MsgTag_t tag;
 
 		// Wait for a message, sometimes sending a reply
@@ -145,7 +149,10 @@ static __inline__ void syscall_loop(void)
 				sos_serial_send(&msg);
 			break;
 
-			/* our system calls */
+			case SOS_SERIAL_READ:
+				sos_serial_read(&msg);
+			break;
+
 			case SOS_UNMAP_ALL:
 				pager_unmap_all(tid);
 				send = 0;

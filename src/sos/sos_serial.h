@@ -8,8 +8,12 @@
 
 #include <l4/message.h>
 
+struct serial* ser;
+
+void sos_serial_init(void);
 void sos_serial_send(L4_Msg_t* msg_p);
-//void sos_serial_recieve(L4_Msg_t* msg_p, int* send_p);
+void sos_serial_receive (struct serial *serial, char c);
+void sos_serial_read(L4_Msg_t* msg_p);
 
 
 #endif /* SOS_SERIAL_H_ */
