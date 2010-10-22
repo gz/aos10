@@ -108,7 +108,7 @@ size_t sos_read(void *vData, long int position, size_t count, void *handle) {
 	size_t words = L4_UntypedWords(tag);
 	assert(words >= 1);
 	size_t received = (size_t)L4_MsgWord(&msg, 0);
-	assert(received == 0 || words == received/4+1);
+	assert(received == 0 || words == (received-1)/4+1);
 
 	// target buffer size
 	size_t to_copy = min(received,count);
