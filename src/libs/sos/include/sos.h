@@ -5,6 +5,7 @@
 
 #include <stdlib.h>
 #include <l4/types.h>
+#include <tty.h>
 
 /* System calls for SOS */
 

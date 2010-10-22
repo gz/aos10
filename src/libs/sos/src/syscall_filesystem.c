@@ -4,7 +4,7 @@ fildes_t stdout_fd = 0;
 
 
 fildes_t open(const char *path, fmode_t mode) {
-	return 0;
+	return -1;
 }
 
 
