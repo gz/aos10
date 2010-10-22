@@ -106,6 +106,11 @@ static page_t* first_level_table = NULL;
  */
 static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 
+	// Null pointer
+	if(addr==0x0) {
+		return L4_NoAccess;
+	}
+
 	// Root server permissions (only physical memory)
 	if(tid.raw == L4_Myself().raw) {
 		if(addr < VIRTUAL_START)
