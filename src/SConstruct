@@ -8,7 +8,7 @@
 
 #
 # XXX: Student change this for the milestone you are building
-milestone = 0
+milestone = 3
 
 # First step is to include our real build tools tools/build.py includes the
 # KengeEnvironment

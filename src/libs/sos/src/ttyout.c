@@ -9,7 +9,7 @@
 #include <l4/kdebug.h>
 #include <l4/ipc.h>
 
-#include "syscalls.h"
+#include "../../../sos/syscalls.h"
 
 
 #define MSG_WORD_SIZE 4
