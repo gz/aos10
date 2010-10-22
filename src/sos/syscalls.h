@@ -20,5 +20,8 @@
 #define SOS_SERIAL_READ 2
 #define SOS_UNMAP_ALL 3
 
+#define SOS_OPEN_CONSOLE 3
+#define SOS_OPEN 4
+
 
 #endif /* SYSCALLS_H_ */

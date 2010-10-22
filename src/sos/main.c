@@ -156,6 +156,10 @@ static __inline__ void syscall_loop(void)
 				send = 0;
 			break;
 
+			/*case SOS_OPEN:
+				send = open_file(tid, &msg);
+			break;*/
+
 			/* error? */
 			default:
 				// Unknown system call, so we don't want to reply to this thread

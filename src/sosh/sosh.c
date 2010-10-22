@@ -236,16 +236,13 @@ main(void)
     int              i, r, done, found, new, argc;
     char             *bp, *p;
     
-    printf("1\n");
-
     in = open("console", FM_READ);
     assert (in >= 0);
-    
-    printf("2\n");
 
     bp   = buf;
     done = 0;
     new  = 1;
+
 
     printf("\n[SOS Starting]\n");
 
