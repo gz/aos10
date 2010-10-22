@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "ttyout.h"
+#include "tty.h"
 
 #include <l4/types.h>
 #include <l4/kdebug.h>

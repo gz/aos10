@@ -19,7 +19,8 @@ int read(fildes_t file, char *buf, size_t nbyte) {
 
 
 int write(fildes_t file, const char *buf, size_t nbyte) {
-	return -1;
+	//sos_write(buf)
+	return 0;
 }
 
 

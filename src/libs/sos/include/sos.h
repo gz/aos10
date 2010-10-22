@@ -3,6 +3,7 @@
 #ifndef _SOS_H
 #define _SOS_H
 
+#include <stdlib.h>
 #include <l4/types.h>
 
 /* System calls for SOS */
