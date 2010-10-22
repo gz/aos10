@@ -37,8 +37,6 @@
  * Max Binary Size: 992 MB [Not used now, will get smaller later]
  *
  *
- * TODO: What to do with UTCB
- *
  **/
 
 /** Small test to see if we have enough heap
