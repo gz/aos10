@@ -106,8 +106,8 @@ static page_t* first_level_table = NULL;
  */
 static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 
-	// Null pointer
-	if(addr==0x0) {
+	// Null pointer exception
+	if(addr < 4096) {
 		return L4_NoAccess;
 	}
 

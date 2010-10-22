@@ -108,6 +108,7 @@ int main(void)
 
     // invalid access:
 	//*(char *) 0x30000000 = 123;
+    //*(char *) NULL = 123;
     pt_test();
 
 
