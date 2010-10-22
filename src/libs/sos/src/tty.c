@@ -21,7 +21,7 @@ static char write_buffer[MSG_MAX_SIZE];
 
 
 
-void ttyout_init(void) {
+void tty_init(void) {
 	sSystemId = L4_Pager(); // Is this the correct way to do it?
 }
 

@@ -8,7 +8,7 @@
  * Must be called prior to any IPC receive operation.
  * Returns task ID of initial server (OS).
  */
-extern void ttyout_init(void);
+extern void tty_init(void);
 
 /*
  * Print to the proper console.  You will need to finish these implementations

@@ -230,7 +230,7 @@ struct command commands[] = {
 int
 main(void)
 {
-	ttyout_init();
+	tty_init();
     char             buf[BUF_SIZ];
     char             *argv[MAX_ARGS];
     int              i, r, done, found, new, argc;
