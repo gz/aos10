@@ -139,7 +139,7 @@ void sos_serial_read (L4_Msg_t* msg_p) {
 
     // add words to message
     char* locbufptr = locbuf;
-    for(unsigned int i = 0; i < to_send/4+1 && i < IPC_MAX_WORDS; i++) {
+    for (unsigned int i = 0; i < to_send/4+1 && i < IPC_MAX_WORDS; i++) {
     	L4_MsgAppendWord(msg_p, (*(L4_Word_t*)locbufptr) );
     	locbufptr += 4; // advanced 4 bytes forward
     }

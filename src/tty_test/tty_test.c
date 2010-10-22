@@ -41,7 +41,7 @@ static void sos_debug_flush(void) {
     L4_MsgTag_t tag;
 
     L4_MsgClear(&msg);
-    L4_Set_MsgLabel(&msg, SOS_UNMAP_ALL << 4);
+    L4_Set_MsgLabel(&msg, TAG_SETSYSCALL(SOS_UNMAP_ALL));
 	L4_MsgLoad(&msg);
 
 	tag = L4_Send(L4_Pager());

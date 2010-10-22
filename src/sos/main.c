@@ -79,8 +79,6 @@ static void init_thread(void)
 }
 
 
-#define TAG_SYSLAB(t)	((short) L4_Label(t) >> 4)
-
 /*
   Syscall loop.
 
@@ -124,14 +122,14 @@ static __inline__ void syscall_loop(void)
 		L4_MsgStore(tag, &msg); /* Get the tag */
 
 		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__,
-			 L4_ThreadNo(tid), (int) TAG_SYSLAB(tag),
+			 L4_ThreadNo(tid), (int) TAG_GETSYSCALL(tag),
 			 (void *) L4_MsgWord(&msg, 0));
 
 		//
 		// Dispatch IPC according to protocol.
 		//
 		send = 1; /* In most cases we will want to send a reply */
-		switch (TAG_SYSLAB(tag)) {
+		switch (TAG_GETSYSCALL(tag)) {
 			case L4_PAGEFAULT:
 				// A pagefault occured. Dispatch to the pager
 				pager(tid, &msg);

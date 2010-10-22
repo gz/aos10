@@ -15,6 +15,7 @@
 #define MSG_WORD_SIZE 4
 #define MSG_MAX_SIZE (MSG_WORD_SIZE*4) // we use 5 registers, 1 register is reserved for msg length
 #define min(a,b) (((a) < (b)) ? (a) : (b))
+#define IPC_MAX_WORDS 64
 
 static L4_ThreadId_t sSystemId;
 static char write_buffer[MSG_MAX_SIZE];
@@ -56,7 +57,7 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
 
 	    }
 
-        L4_Set_MsgLabel(&msg, SOS_SERIAL_WRITE << 4);
+        L4_Set_MsgLabel(&msg, TAG_SETSYSCALL(SOS_SERIAL_WRITE));
     	L4_MsgLoad(&msg);
 
 		// send message to root server and wait for reply
@@ -83,11 +84,57 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
 
 
 size_t sos_read(void *vData, long int position, size_t count, void *handle) {
-	size_t i;
-	char *realdata = vData;
-	for (i = 0; i < count; i++) // Fix this to use your syscall
-		realdata[i] = L4_KDB_ReadChar_Blocked();
-	return count;
+
+    // prepare IPC message
+    L4_Msg_t msg;
+    L4_MsgTag_t tag;
+    L4_MsgClear(&msg);
+
+    // set count of chars to read
+    L4_MsgAppendWord(&msg, (L4_Word_t)count);
+
+    // construct message label and load message
+    L4_Set_MsgLabel(&msg, TAG_SETSYSCALL(SOS_SERIAL_READ));
+	L4_MsgLoad(&msg);
+
+	// send message to root server and wait for reply
+	tag = L4_Call(sSystemId);
+
+	// check if ipc failed
+	if(L4_IpcFailed(tag))
+		return 0;
+
+	// get reply message lengths (words and chars)
+	size_t words = L4_UntypedWords(tag);
+	assert(words >= 1);
+	size_t received = (size_t)L4_MsgWord(&msg, 0);
+	assert(received == 0 || words == received/4+1);
+
+	// target buffer size
+	size_t to_copy = min(received,count);
+
+	// copy message contents to out buffer
+	char* ptr = (char*)vData;
+	unsigned int i = 1;
+	while (to_copy > 4) {
+		*ptr = L4_MsgWord(&msg, i);
+		i++;
+		to_copy -= 4;
+	}
+	// copy the last word in parts
+	if (to_copy > 0) {
+		char minibuf[4];
+		minibuf = L4_MsgWord(&msg, i);
+		memcpy(ptr,minibuf,to_copy);
+	}
+
+	return min(received,count);
+
+	//size_t i;
+	//char *realdata = vData;
+	//for (i = 0; i < count; i++) // Fix this to use your syscall
+	//	realdata[i] = L4_KDB_ReadChar_Blocked();
+	//return count;
 }
 
 void abort(void) {

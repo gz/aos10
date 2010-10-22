@@ -8,6 +8,9 @@
 #ifndef SYSCALLS_H_
 #define SYSCALLS_H_
 
+#define TAG_GETSYSCALL(t)	((short) L4_Label(t) >> 4)
+#define TAG_SETSYSCALL(t)	(t << 4)
+
 /* Some IPC labels defined in the L4 documentation */
 #define L4_PAGEFAULT	((L4_Word_t) -2)
 #define L4_INTERRUPT	((L4_Word_t) -1)
