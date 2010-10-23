@@ -69,7 +69,9 @@ int close(fildes_t file) {
 
 
 int read(fildes_t file, char *buf, size_t nbyte) {
-	return sos_read(buf, 0, nbyte, NULL);
+	int read = sos_read(buf, 0, nbyte, NULL);
+	printf("read bytes: %d\n", read);
+	return read;
 }
 
 
