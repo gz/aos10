@@ -11,10 +11,6 @@
 // To remember checkout a mobile keypad for AOS06
 #define AOS06_PORT (26706)
 
-struct serial {
-    void (*fHandler) (struct serial *serial, char c);
-    struct udp_pcb *fUpcb;
-};
 
 static void serial_recv_handler(void *vSerial, struct udp_pcb *unused0, 
 			struct pbuf *p, struct ip_addr *unused1, u16_t unused2)

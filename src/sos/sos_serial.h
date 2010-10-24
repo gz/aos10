@@ -10,10 +10,12 @@
 
 struct serial* ser;
 
-void sos_serial_init(void);
-void sos_serial_send(L4_Msg_t* msg_p);
+//void sos_serial_init(void);
+//int sos_serial_send(int, char*);
 void sos_serial_receive (struct serial *serial, char c);
 void sos_serial_read(L4_Msg_t* msg_p);
+
+void sos_serial_test(L4_Msg_t*, L4_Word_t*);
 
 
 #endif /* SOS_SERIAL_H_ */

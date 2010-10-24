@@ -44,6 +44,7 @@ rootserver_env.AddLibrary("ixp400_xscale_sw")
 rootserver_env.AddLibrary("lwip")
 rootserver_env.AddLibrary("nfs")
 rootserver_env.AddLibrary("serial")
+rootserver_env.AddLibrary("sos_shared")
 sos = rootserver_env.Application("sos");
 
 timer_syscall_milestone = 3
@@ -59,6 +60,7 @@ if milestone < timer_syscall_milestone:
     app_name = "tty_test"
 else:
     app_name = "sosh"
+    app_env.AddLibrary("sos_shared")
     app_env.AddLibrary("sos")
 
 # Once you get to the later milestones you will be writing lots of little test

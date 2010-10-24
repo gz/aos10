@@ -24,8 +24,8 @@
  *
  * Layout of our virtual address space:
  * ------------------------------------
- *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess  |  STACK  |  NoAccess  ]]
- * 0x02000000         0x40000000                      0xC0000000
+ *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess | IPC Memory |  NoAccess  |  STACK  |  NoAccess  ]]
+ * 0x02000000         0x40000000            0x60000000               0xC0000000
  *
  * Limitations:
  * ------------------------------------
@@ -72,8 +72,13 @@ for(int i=0; i<4096; i++) {
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)
 #define VIRTUAL_START 0x2000000
+
 #define STACK_TOP 0xC0000000
 #define STACK_END (STACK_TOP - ONE_MEGABYTE)
+
+#define IPC_START 0x60000000
+#define IPC_END (IPC_START + 4096)
+
 #define HEAP_START 0x4000000
 #define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
 
@@ -123,6 +128,10 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 
 	// Heap permissions
 	if(addr >= HEAP_START && addr < HEAP_END)
+		return L4_ReadWriteOnly;
+
+	// Heap permissions
+	if(addr >= IPC_START && addr < IPC_END)
 		return L4_ReadWriteOnly;
 
 	// Stack permissions
@@ -365,3 +374,14 @@ void pager_free_all(L4_ThreadId_t tid) {
 	L4_CacheFlushAll();
 }
 
+
+void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
+
+	page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	if(first_entry->address == NULL)
+		return NULL;
+
+	page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+
+	return second_entry->address;
+}

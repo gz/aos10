@@ -1,0 +1,5 @@
+Import("*")
+import os
+
+lib = env.MyLibrary("sos_shared", LIBS=["l4"])
+Return("lib")

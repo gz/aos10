@@ -1,28 +1,33 @@
 #ifndef IO_H_
 #define IO_H_
 
+#include <sos_shared.h>
 #include <l4/message.h>
 
-#define MAX_FILES 16
-
-typedef unsigned char* data_ptr;
-
 /** Internal file handle representation */
-struct file_table_entry {
+struct fentry;
+typedef struct fentry {
+	char identifier[N_NAME];
+
 	data_ptr buffer;
-	L4_Word_t access_mode;
-	L4_Word_t pos;
-	L4_Word_t buffer_size;
+	int position;
+
+	data_ptr destination;
 	L4_ThreadId_t reader_tid;
-};
+	L4_Bool_t reader_blocking;
 
-typedef struct file_table_entry* file_handle;
+	struct serial* serial_handle;
+	int (*write)(struct fentry*, int, data_ptr);
+	int (*read)(struct fentry*, int, data_ptr);
+} file_table_entry;
 
-/** File table */
-void *file_table[MAX_FILES];
+#define SPECIAL_FILES 1
+file_table_entry special_table[SPECIAL_FILES];
 
-void open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p);
-void read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p);
-void write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p);
+
+void io_init(void);
+void open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int read_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+void write_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
 #endif /* IO_H_ */

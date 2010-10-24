@@ -13,16 +13,18 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <sos_shared.h>
 
-#include "syscalls.h"
 #include "l4.h"
 #include "libsos.h"
 #include "network.h"
-#include "sos_serial.h"
 
 #include "pager.h"
 #include "frames.h"
 #include "frames_test.h"
+
+#include "io.h"
+#include "sos_serial.h"
 
 #include "../libs/c/src/k_r_malloc.h"
 
@@ -40,14 +42,14 @@
 static L4_Word_t init_stack_s[STACK_SIZE];
 //static L4_Word_t user_stack_s[STACK_SIZE];
 
+
 // Init thread - This function starts up our device drivers and runs the first
 // user program.
 static void init_thread(void)
 {
     // Initialise the network for libsos_logf_init
     network_init();
-
-	sos_serial_init();
+	io_init();
 
 
     // Loop through the BootInfo starting executables
@@ -66,6 +68,7 @@ static void init_thread(void)
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
+   // (*(L4_Word_t*) RCVWIND) = 1;
 
     //dprintf(0, "Calling frame test:\n");
     //frame_test1();
@@ -122,16 +125,15 @@ static __inline__ void syscall_loop(void)
 		L4_MsgStore(tag, &msg); /* Get the tag */
 
 		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__,
-			 L4_ThreadNo(tid), (int) TAG_GETSYSCALL(tag),
+			 L4_ThreadNo(tid), (int) GET_SYSCALL_NR(tag),
 			 (void *) L4_MsgWord(&msg, 0));
 
 		//
 		// Dispatch IPC according to protocol.
 		//
 		send = 1; /* In most cases we will want to send a reply */
-		switch (TAG_GETSYSCALL(tag)) {
+		switch (GET_SYSCALL_NR(tag)) {
 			case L4_PAGEFAULT:
-				// A pagefault occured. Dispatch to the pager
 				pager(tid, &msg);
 			break;
 
@@ -142,13 +144,15 @@ static __inline__ void syscall_loop(void)
 			break;
 
 			/* our system calls */
-			case SOS_SERIAL_WRITE:
-				assert(L4_UntypedWords(tag) == 5); // make sure there were 5 registers filled with stuff
-				sos_serial_send(&msg);
+			case SOS_OPEN:
+				open_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+
+			case SOS_READ:
+				send = read_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
 			break;
 
-			case SOS_SERIAL_READ:
-				sos_serial_read(&msg);
+			case SOS_WRITE:
+				write_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
 			break;
 
 			case SOS_UNMAP_ALL:
