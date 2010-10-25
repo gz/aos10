@@ -10,11 +10,13 @@ typedef struct fentry {
 	char identifier[N_NAME];
 
 	data_ptr buffer;
-	int position;
+	int pos_write;
+	int pos_read;
 
 	data_ptr destination;
 	L4_ThreadId_t reader_tid;
 	L4_Bool_t reader_blocking;
+	int to_read;
 
 	struct serial* serial_handle;
 	int (*write)(struct fentry*, int, data_ptr);

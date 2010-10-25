@@ -11,13 +11,29 @@
 #define verbose 1
 
 // Buffer for console read
-#define READ_BUFFER_SIZE 0x1000
+#define READ_BUFFER_SIZE 0x10//00
 static char read_buffer[READ_BUFFER_SIZE];
 
 static int copy_console_buffer(file_table_entry* f) {
 
-	if(f->position > 0 && f->reader_blocking) {
-		memcpy(f->destination, f->buffer, f->position);
+	// check f->to_read against buffer fill and determine how many chars should be sent
+	L4_Word_t max_send = min(f->to_read,READ_BUFFER_SIZE);
+	L4_Word_t to_send = min((READ_BUFFER_SIZE+f->pos_write-f->pos_read)%READ_BUFFER_SIZE,max_send);
+
+	if(to_send > 0 && f->reader_blocking) {
+
+		// copy the contents of the circular buffer to the shared memory location
+		if (f->pos_read < f->pos_write)
+			memcpy(f->destination, &f->buffer[f->pos_read], f->pos_write-f->pos_read);
+		else {
+			memcpy(f->destination, &f->buffer[f->pos_read], READ_BUFFER_SIZE-f->pos_read);
+			memcpy(&f->destination[READ_BUFFER_SIZE-f->pos_read], f->buffer, f->pos_write);
+		}
+
+		// ensure that there is a newline at the end
+		assert(f->destination[to_send-1] == '\n');
+//		if (to_send == max_send && max_send > 0)
+//			f->destination[max_send-1] = '\n';
 
 		L4_MsgTag_t tag;
 		L4_Msg_t msg;
@@ -25,9 +41,11 @@ static int copy_console_buffer(file_table_entry* f) {
 		L4_Set_MsgTag(tag);
 	    L4_MsgClear(&msg);
 	    dprintf(0, "f->reader_tid: 0x%X\n", f->reader_tid.raw);
-	    dprintf(0, "f->position: %d\n", f->position);
+	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
+	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
+	    dprintf(0, "to_send: %d\n", to_send);
 
-	    L4_MsgAppendWord(&msg, f->position);
+	    L4_MsgAppendWord(&msg, to_send);
 
 
 	    // Set Label and prepare message
@@ -45,7 +63,7 @@ static int copy_console_buffer(file_table_entry* f) {
 			sos_print_error(ec);
 		}
 		else {
-			f->position = 0;
+			f->pos_read = (f->pos_read + to_send) % READ_BUFFER_SIZE;
 		}
 	}
 
@@ -61,22 +79,37 @@ static int copy_console_buffer(file_table_entry* f) {
  * @param c received char
  */
 static void serial_receive_handler(struct serial* ser, char c) {
-	file_table_entry* f = &special_table[0];
-	assert(f != NULL);
-	assert(f->position <= READ_BUFFER_SIZE);
-	assert(f->reader_tid.raw != 0);
-
-	// discard char if buffer is full
-	if(f->position == READ_BUFFER_SIZE) {
-		dprintf(0, "Console read buffer overflow. We're starting to loose things here :-(.\n");
-		return;
-	}
-
+	// debug out
 	dprintf(0,"%c",c);
 
-	f->buffer[f->position++] = c;
+	// get file_table_entry pointer
+	file_table_entry* f = &special_table[0];
+	assert(f != NULL);
+	assert(f->reader_tid.raw != 0);
 
-	if(c == '\n')
+	// add char to circular buffer
+	f->buffer[f->pos_write] = c;
+	f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
+
+	// discard char if buffer is full
+//	if (f->position == READ_BUFFER_SIZE) {
+//		dprintf(0, "Console read buffer overflow. We're starting to loose things here :-(.\n");
+//		return;
+//	}
+
+	// if end of the buffer (but one char) has been reached, add newline and send text
+	if ((f->pos_write+2) % READ_BUFFER_SIZE == f->pos_read) {
+		dprintf(0, "Console read buffer overflow. We're starting to loose things here :-(.\n");
+	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
+	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
+		f->buffer[f->pos_write] = '\n';
+		f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
+	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
+	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
+		copy_console_buffer(f);
+	}
+	// if newline found, just send text
+	else if (c == '\n')
 		copy_console_buffer(f);
 }
 
@@ -136,8 +169,10 @@ void io_init() {
 	strcpy(special_table[0].identifier, "console");
 	special_table[0].reader_tid = L4_nilthread;
 	special_table[0].reader_blocking = FALSE;
+	special_table[0].to_read = 0;
 	special_table[0].buffer = (data_ptr) &read_buffer;
-	special_table[0].position = 0;
+	special_table[0].pos_write = 0;
+	special_table[0].pos_read = 0;
 	special_table[0].destination = NULL;
 	special_table[0].serial_handle = console_init();
 	//special_table[0].serial_handle->file = &special_table[0];
@@ -155,7 +190,7 @@ void open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int fd = L4_MsgWord(msg_p, 0);
-	//int to_read = L4_MsgWord(msg_p, 1);
+	int to_read = L4_MsgWord(msg_p, 1);
 
 	//dprintf(0, "to_read is: %d\n", to_read);
 	//dprintf(0, "fd is: %d\n", fd);
@@ -168,6 +203,7 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 		f->reader_tid = tid; // TODO: hack
 		f->reader_blocking = TRUE;
+		f->to_read = to_read;
 		f->destination = buf;
 
 		copy_console_buffer(f);
