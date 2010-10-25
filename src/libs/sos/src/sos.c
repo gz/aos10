@@ -28,6 +28,8 @@ L4_MsgTag_t system_call(int type, L4_Msg_t* msg_p, int args, ...) {
 		printf("System Call# %d has failed.", type);
 	}
 
+	L4_MsgStore(tag, msg_p);
+
 	return tag;
 }
 

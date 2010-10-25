@@ -40,10 +40,8 @@ static int copy_console_buffer(file_table_entry* f) {
 
 
 		if(L4_IpcFailed(tag)) {
-			dprintf(0, "Console read IPC callback has failed. User thread not blocking?\n");
-
 			L4_Word_t ec = L4_ErrorCode();
-			dprintf(0, "%s: IPC error\n", __FUNCTION__);
+			dprintf(0, "%s: Console read IPC callback has failed. User thread not blocking?\n", __FUNCTION__);
 			sos_print_error(ec);
 		}
 		else {
@@ -62,7 +60,7 @@ static int copy_console_buffer(file_table_entry* f) {
  * @param serial structure identifying the serial console
  * @param c received char
  */
-static void serial_receive(struct serial* ser, char c) {
+static void serial_receive_handler(struct serial* ser, char c) {
 	file_table_entry* f = &special_table[0];
 	assert(f != NULL);
 	assert(f->position <= READ_BUFFER_SIZE);
@@ -78,7 +76,8 @@ static void serial_receive(struct serial* ser, char c) {
 
 	f->buffer[f->position++] = c;
 
-	copy_console_buffer(f);
+	if(c == '\n')
+		copy_console_buffer(f);
 }
 
 /**
@@ -91,7 +90,7 @@ static struct serial* console_init(void) {
 	struct serial* ser = serial_init();
 	assert(ser != NULL);
 
-	serial_register_handler(ser, &serial_receive);
+	serial_register_handler(ser, &serial_receive_handler);
 
 	return ser;
 }
@@ -156,6 +155,11 @@ void open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int fd = L4_MsgWord(msg_p, 0);
+	//int to_read = L4_MsgWord(msg_p, 1);
+
+	//dprintf(0, "to_read is: %d\n", to_read);
+	//dprintf(0, "fd is: %d\n", fd);
+
 	assert(fd == 0); // TODO: only console supported right now
 
 	file_table_entry* f = &special_table[fd];
@@ -166,17 +170,11 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		f->reader_blocking = TRUE;
 		f->destination = buf;
 
-		//copy_console_buffer(f);
+		copy_console_buffer(f);
 	}
 
-	//int to_read = L4_MsgWord(msg_p, 1);
 
-	//int read = sos_serial_send(to_read, buf);
-
-	L4_MsgClear(msg_p);
-    L4_MsgAppendWord(msg_p, 99);
-    L4_MsgLoad(msg_p);
-	return 0;
+    return 0;
 }
 
 
@@ -190,10 +188,10 @@ void write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int fd = L4_MsgWord(msg_p, 0);
 	assert(fd == 0); // TODO: only console supported right now
 
-	file_table_entry f = special_table[fd];
+	file_table_entry* f = &special_table[fd];
 
 	int to_write = L4_MsgWord(msg_p, 1);
-	int written = f.write(&f, to_write, buf);
+	int written = f->write(f, to_write, buf);
 
 	L4_MsgClear(msg_p);
     L4_MsgAppendWord(msg_p, written);

@@ -37,14 +37,16 @@ int close(fildes_t file) {
 int read(fildes_t file, char* buf, size_t to_read) {
     L4_Msg_t msg;
 
-    (void) system_call(SOS_READ, &msg, 2, file, to_read);
-	//assert(L4_UntypedWords(tag) == 1);
+    system_call(SOS_READ, &msg, 2, file, to_read);
+	assert(L4_UntypedWords(tag) == 1);
 
 	L4_Word_t received = L4_MsgWord(&msg, 0);
-	printf("received: %lu\n", received);
 	assert(received <= MAX_IO_BUF);
 
 	memcpy(buf, ipc_memory_start, received);
+
+	printf("received: %lu\n", received);
+	printf("got string msg: %s\n", buf);
 
 	return received;
 }
