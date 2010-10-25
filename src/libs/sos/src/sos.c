@@ -5,6 +5,9 @@
 
 L4_MsgTag_t system_call(int type, L4_Msg_t* msg_p, int args, ...) {
 
+    L4_Accept( L4_UntypedWordsAcceptor );
+
+
     L4_MsgClear(msg_p);
 
     // Appending Data Words

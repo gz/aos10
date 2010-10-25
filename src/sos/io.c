@@ -13,38 +13,43 @@
 // Buffer for console read
 #define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
-static unsigned int read_buffer_count = 0;
-
 
 static int copy_console_buffer(file_table_entry* f) {
-	dprintf(0, "copy_console_buffer for: 0x%X\n", f->reader_tid);
 
 	if(f->position > 0 && f->reader_blocking) {
 		memcpy(f->destination, f->buffer, f->position);
 
+		L4_MsgTag_t tag;
 		L4_Msg_t msg;
-	    L4_MsgClear(&msg);
 
-    	L4_MsgAppendWord(&msg, f->position);
+		L4_Set_MsgTag(tag);
+	    L4_MsgClear(&msg);
+	    dprintf(0, "f->reader_tid: 0x%X\n", f->reader_tid.raw);
+	    dprintf(0, "f->position: %d\n", f->position);
+
+	    L4_MsgAppendWord(&msg, f->position);
+
 
 	    // Set Label and prepare message
 	    L4_Set_MsgLabel(&msg, SOS_READ << 4);
 	    L4_MsgLoad(&msg);
 
 	    // Sending Message
-	    dprintf(0, "sending msg to: 0x%X\n", f->reader_tid);
-		L4_MsgTag_t tag = L4_Send_Nonblocking(f->reader_tid);
+	    f->reader_blocking = FALSE;
+		tag = L4_Reply(f->reader_tid);
+
 
 		if(L4_IpcFailed(tag)) {
 			dprintf(0, "Console read IPC callback has failed. User thread not blocking?\n");
+
+			L4_Word_t ec = L4_ErrorCode();
+			dprintf(0, "%s: IPC error\n", __FUNCTION__);
+			sos_print_error(ec);
 		}
 		else {
-			f->reader_blocking = FALSE;
 			f->position = 0;
 		}
 	}
-
-	dprintf(0, "end: copy_console_buffer for: 0x%X\n", f->reader_tid);
 
 	return 0;
 
@@ -58,11 +63,9 @@ static int copy_console_buffer(file_table_entry* f) {
  * @param c received char
  */
 static void serial_receive(struct serial* ser, char c) {
-	assert(read_buffer_count <= READ_BUFFER_SIZE);
-
 	file_table_entry* f = &special_table[0];
-
 	assert(f != NULL);
+	assert(f->position <= READ_BUFFER_SIZE);
 	assert(f->reader_tid.raw != 0);
 
 	// discard char if buffer is full
@@ -152,30 +155,27 @@ void open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 
 int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	dprintf(0, "got read syscall from: %d\n", tid);
-
 	int fd = L4_MsgWord(msg_p, 0);
 	assert(fd == 0); // TODO: only console supported right now
 
 	file_table_entry* f = &special_table[fd];
 
 	if(is_special_file(f)) {
-		dprintf(0, "special file handling\n");
 
 		f->reader_tid = tid; // TODO: hack
 		f->reader_blocking = TRUE;
 		f->destination = buf;
 
-		copy_console_buffer(f);
+		//copy_console_buffer(f);
 	}
 
 	//int to_read = L4_MsgWord(msg_p, 1);
 
 	//int read = sos_serial_send(to_read, buf);
 
-	/*L4_MsgClear(msg_p);
-    L4_MsgAppendWord(msg_p, sent);
-    L4_MsgLoad(msg_p);*/
+	L4_MsgClear(msg_p);
+    L4_MsgAppendWord(msg_p, 99);
+    L4_MsgLoad(msg_p);
 	return 0;
 }
 
