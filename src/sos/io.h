@@ -16,6 +16,7 @@ typedef struct fentry {
 	data_ptr destination;
 	L4_ThreadId_t reader_tid;
 	L4_Bool_t reader_blocking;
+	L4_Bool_t double_overflow;
 	int to_read;
 
 	struct serial* serial_handle;

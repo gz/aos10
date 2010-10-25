@@ -11,16 +11,14 @@
 #define verbose 1
 
 // Buffer for console read
-#define READ_BUFFER_SIZE 0x10//00
+#define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
 
 static int copy_console_buffer(file_table_entry* f) {
 
 	// check f->to_read against buffer fill and determine how many chars should be sent
-	L4_Word_t max_send = min(f->to_read,READ_BUFFER_SIZE);
+	L4_Word_t max_send = min(f->to_read,READ_BUFFER_SIZE-1);
 	L4_Word_t to_send = min((READ_BUFFER_SIZE+f->pos_write-f->pos_read)%READ_BUFFER_SIZE,max_send);
-
-    dprintf(0, "f->reader_blocking: %d\n", f->reader_blocking);
 
 	if(to_send > 0 && f->reader_blocking) {
 
@@ -34,13 +32,6 @@ static int copy_console_buffer(file_table_entry* f) {
 
 		// ensure that there is a newline at the end
 		assert(f->destination[to_send-1] == '\n');
-
-		// debug output of destination buffer
-		char* locbuf = malloc(to_send+1);
-		memcpy(locbuf,f->destination,to_send);
-		locbuf[to_send] = '\0';
-	    dprintf(0, "f->destination: %s\n", locbuf);
-	    free(locbuf);
 
 		L4_MsgTag_t tag;
 		L4_Msg_t msg;
@@ -61,6 +52,7 @@ static int copy_console_buffer(file_table_entry* f) {
 
 	    // Sending Message
 	    f->reader_blocking = FALSE;
+	    f->double_overflow = FALSE;
 		tag = L4_Reply(f->reader_tid);
 
 
@@ -71,9 +63,8 @@ static int copy_console_buffer(file_table_entry* f) {
 			f->reader_blocking = TRUE;
 		}
 		else {
+			// increment read pointer
 			f->pos_read = (f->pos_read + to_send) % READ_BUFFER_SIZE;
-		    dprintf(0, "inc: f->pos_read: %d\n", f->pos_read);
-		    dprintf(0, "inc: f->pos_write: %d\n", f->pos_write);
 		}
 	}
 
@@ -97,25 +88,24 @@ static void serial_receive_handler(struct serial* ser, char c) {
 	assert(f != NULL);
 	assert(f->reader_tid.raw != 0);
 
+	// if the buffer is full for the 2nd time, drop whatever follows
+	if (f->double_overflow)
+		return;
+
 	// add char to circular buffer
 	f->buffer[f->pos_write] = c;
 	f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
 
-	// discard char if buffer is full
-//	if (f->position == READ_BUFFER_SIZE) {
-//		dprintf(0, "Console read buffer overflow. We're starting to loose things here :-(.\n");
-//		return;
-//	}
-
 	// if end of the buffer (but one char) has been reached, add newline and send text
 	if ((f->pos_write+2) % READ_BUFFER_SIZE == f->pos_read) {
-		dprintf(0, "Console read buffer overflow. We're starting to loose things here :-(.\n");
-	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
-	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
 		f->buffer[f->pos_write] = '\n';
 		f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
-	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
-	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
+		// if the buffer is full for the 2nd time, drop whatever follows
+		if (!f->reader_blocking) {
+			f->double_overflow = TRUE;
+			dprintf(0, "\nDouble console read buffer overflow. We're starting to loose things here :-(.\n");
+			return;
+		}
 		copy_console_buffer(f);
 	}
 	// if newline found, just send text
@@ -179,6 +169,7 @@ void io_init() {
 	strcpy(special_table[0].identifier, "console");
 	special_table[0].reader_tid = L4_nilthread;
 	special_table[0].reader_blocking = FALSE;
+	special_table[0].double_overflow = FALSE;
 	special_table[0].to_read = 0;
 	special_table[0].buffer = (data_ptr) &read_buffer;
 	special_table[0].pos_write = 0;
