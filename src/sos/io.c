@@ -66,59 +66,30 @@ inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
 }
 
 
-static void read_serial(file_table_entry* f) {
+/**
+ * Searches for a given file in the special file table.
+ *
+ * @param name of file to search for
+ * @return index in special_table or -1 if not found
+ */
+static fildes_t find_special_file(data_ptr name) {
 
-	// check f->to_read against buffer fill and determine how many chars should be sent
-	L4_Word_t max_send = min(f->to_read, READ_BUFFER_SIZE-1);
-	L4_Word_t to_send = min((READ_BUFFER_SIZE + f->write_position - f->read_position) % READ_BUFFER_SIZE, max_send);
-
-	if(to_send > 0 && f->reader_blocking) {
-
-		dprintf(3, "copy_console_buffer: f->reader_blocking: %d\n", f->reader_blocking);
-
-		// copy the contents of the circular buffer to the shared memory location
-		if (f->read_position < f->write_position)
-			memcpy(f->destination, &f->buffer[f->read_position], f->write_position - f->read_position);
-		else {
-			memcpy(f->destination, &f->buffer[f->read_position], READ_BUFFER_SIZE-f->read_position);
-			memcpy(&f->destination[READ_BUFFER_SIZE - f->read_position], f->buffer, f->write_position);
-		}
-
-		// ensure that there is a newline at the end
-		assert(f->destination[to_send-1] == '\n');
-
-		L4_MsgTag_t tag;
-		L4_Msg_t msg;
-
-		L4_Set_MsgTag(tag);
-	    L4_MsgClear(&msg);
-	    L4_MsgAppendWord(&msg, to_send);
-
-	    // Set Label and prepare message
-	    L4_Set_MsgLabel(&msg, SOS_READ << 4);
-	    L4_MsgLoad(&msg);
-
-	    // Sending Message
-		tag = L4_Reply(f->owner);
-
-	    f->reader_blocking = FALSE;
-	    f->double_overflow = FALSE;
-
-
-		if(L4_IpcFailed(tag)) {
-			L4_Word_t ec = L4_ErrorCode();
-			dprintf(0, "%s: Console read IPC callback has failed. User thread not blocking?\n", __FUNCTION__);
-			sos_print_error(ec);
-			f->reader_blocking = TRUE;
-		}
-		else {
-			// increment read pointer
-			f->read_position = (f->read_position + to_send) % READ_BUFFER_SIZE;
-		}
+	for(int i=0; i<SPECIAL_FILES; i++) {
+		if(strcmp(file_table[i]->identifier, name) == 0)
+			return i;
 	}
+
+	return -1;
 }
 
 
+/**
+ * Finds a file handle entry with serial_handle pointing to the same
+ * memory location as `ser`.
+ *
+ * @param ser struct to search for
+ * @return Pointer to the corresponding file table entry or NULL if not found.
+ */
 static inline file_table_entry* get_file_handle_for_serial(struct serial* ser) {
 	file_table_entry* f = NULL;
 
@@ -133,6 +104,11 @@ static inline file_table_entry* get_file_handle_for_serial(struct serial* ser) {
 
 /**
  * Interrupt handler for incoming chars on serial console.
+ * This function will find the special file corresponding
+ * to the serial struct. Then fill its buffer with
+ * the incoming char and call it's write function.
+ * The write function is responsible for determine if it's
+ * time to send an IPC back to the client.
  *
  * @param serial structure identifying the serial console
  * @param c received char
@@ -168,10 +144,10 @@ static void serial_receive_handler(struct serial* ser, char c) {
 		f->read(f);
 }
 
+
 /**
  * Initializes serial struct and registers handler function
  * function to receive input data.
- *
  */
 static struct serial* console_init(void) {
 
@@ -185,7 +161,77 @@ static struct serial* console_init(void) {
 
 
 /**
+ * Read function for special devices reading from a serial device.
+ * This function is usually called in `read_file` or by a serial
+ * interrupt. It only sends an IPC message back to the client
+ * if we have something in the buffer. This realizes the blocking read
+ * call on the client side.
  *
+ * Note: Special Files using this function need at least a buffer of size
+ * `READ_BUFFER_SIZE`.
+ *
+ * @param f callee
+ */
+static void read_serial(file_table_entry* f) {
+
+	// check f->to_read against buffer fill and determine how many chars should be sent
+	L4_Word_t max_send = min(f->to_read, READ_BUFFER_SIZE-1);
+	L4_Word_t to_send = min((READ_BUFFER_SIZE + f->write_position - f->read_position) % READ_BUFFER_SIZE, max_send);
+
+	if(to_send > 0 && f->reader_blocking) {
+
+		dprintf(3, "copy_console_buffer: f->reader_blocking: %d\n", f->reader_blocking);
+
+		// copy the contents of the circular buffer to the shared memory location
+		if (f->read_position < f->write_position)
+			memcpy(f->destination, &f->buffer[f->read_position], f->write_position - f->read_position);
+		else {
+			memcpy(f->destination, &f->buffer[f->read_position], READ_BUFFER_SIZE-f->read_position);
+			memcpy(&f->destination[READ_BUFFER_SIZE - f->read_position], f->buffer, f->write_position);
+		}
+
+		// ensure that there is a newline at the end
+		assert(f->destination[to_send-1] == '\n');
+
+		L4_MsgTag_t tag;
+		L4_Msg_t msg;
+
+		L4_Set_MsgTag(tag);
+	    L4_MsgClear(&msg);
+	    L4_MsgAppendWord(&msg, to_send);
+
+	    // Set Label and prepare message
+	    L4_Set_MsgLabel(&msg, CREATE_SYSCALL_NR(SOS_READ));
+	    L4_MsgLoad(&msg);
+
+	    // Sending Message
+		tag = L4_Reply(f->owner);
+
+	    f->reader_blocking = FALSE;
+	    f->double_overflow = FALSE;
+
+
+		if(L4_IpcFailed(tag)) {
+			L4_Word_t ec = L4_ErrorCode();
+			dprintf(0, "%s: Console read IPC callback has failed. User thread not blocking?\n", __FUNCTION__);
+			sos_print_error(ec);
+			f->reader_blocking = TRUE;
+		}
+		else {
+			// increment read pointer
+			f->read_position = (f->read_position + to_send) % READ_BUFFER_SIZE;
+		}
+	}
+}
+
+
+/**
+ * This is a write function for special files writing to a serial device.
+ *
+ * @param f special file entry (callee)
+ * @param to_send amount of bytes to send
+ * @param buffer send content
+ * @return total bytes sent
  */
 static int write_serial(file_table_entry* f, int to_send, char* buffer) {
 	// serial struct must be initialized
@@ -212,6 +258,12 @@ static int write_serial(file_table_entry* f, int to_send, char* buffer) {
 	return total_sent;
 }
 
+
+/**
+ * Initializer is called in main.c by the sos server on startup (after network init).
+ * This creates a special device called "console" and links it with the serial
+ * console.
+ */
 void io_init() {
 	dprintf(0, "io_init called\n");
 
@@ -228,28 +280,11 @@ void io_init() {
 	file_table[0]->read_position = 0;
 	file_table[0]->destination = NULL;
 	file_table[0]->serial_handle = console_init();
-	//file_table[0]->serial_handle->file = file_table[0];
 	file_table[0]->read = &read_serial;
 	file_table[0]->write = &write_serial;
 
-	//assert(file_table[0]->serial_handle->file == file_table[0]);
 }
 
-/**
- * Searches for a given file in the special filetable.
- *
- * @param name of file to search for
- * @return index in special_table or -1 if not found
- */
-static fildes_t find_special_file(data_ptr name) {
-
-	for(int i=0; i<SPECIAL_FILES; i++) {
-		if(strcmp(file_table[i]->identifier, name) == 0)
-			return i;
-	}
-
-	return -1;
-}
 
 
 /**
@@ -310,8 +345,14 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
 }
 
 
+/**
+ * Systam Call handler for reading a file.
+ *
+ * @param tid Caller thread ID
+ * @param msg_p IPC Message
+ * @param buf buffer where content is copied into
+ */
 int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
 		return set_ipc_reply(msg_p, 1, -1);
 
@@ -337,10 +378,18 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		// TODO: file system read
 		return set_ipc_reply(msg_p, 1, -1);
 	}
-
 }
 
 
+/**
+ * System Call handler for writing to a file.
+ * Calls the write function of the file entry and
+ * returns bytes written to the callee through IPC.
+ *
+ * @param tid Caller thread ID
+ * @param msg_p IPC message
+ * @param buf buffer to write
+ */
 int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
