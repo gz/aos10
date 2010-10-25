@@ -9,29 +9,12 @@
 
 #define verbose 1
 
+#define IPC_SET_ERROR(err) set_ipc_reply(msg_p, 1, (err));
+
 // Buffer for console read
 #define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
 
-#include <stdarg.h>
-static int set_ipc_reply(L4_Msg_t* msg_p, int args, ...) {
-	assert(args < IPC_MAX_WORDS);
-
-	L4_MsgClear(msg_p);
-
-    // Appending Data Words
-	va_list ap;
-	va_start(ap, args);
-    for(int i = 0; i < args; i++) {
-    	L4_MsgAppendWord(msg_p, va_arg(ap, L4_Word_t));
-    }
-    va_end(ap);
-
-
-    L4_MsgLoad(msg_p);
-
-    return 1;
-}
 
 /** Test to see whether a given file is a special file or not */
 inline static L4_Bool_t is_special_file(file_table_entry* f) {
@@ -309,13 +292,13 @@ void io_init() {
 int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
 
 	if(name == NULL || L4_UntypedWords(msg_p->tag) != 1)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	fmode_t mode = L4_MsgWord(msg_p, 0);
 	fildes_t fd = -1;
 
 	if(mode != O_RDONLY && mode != O_RDWR && mode != O_WRONLY)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	// make sure our name is really \0 terminated
 	// so no client can trick us into reading garbage by calling string functions on this
@@ -332,7 +315,7 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
 			if(f->owner.raw == 0 || f->owner.raw == tid.raw)
 				f->owner = tid;
 			else
-				return set_ipc_reply(msg_p, 1, -1); // error: only one process allowed for writing
+				return IPC_SET_ERROR(-1); // error: only one process allowed for writing
 
 		}
 		return set_ipc_reply(msg_p, 1, fd); // writing always allowed, return file descriptor
@@ -354,13 +337,13 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
  */
 int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	int fd = L4_MsgWord(msg_p, 0);
 	size_t to_read = L4_MsgWord(msg_p, 1);
 
 	if(!can_read(tid, fd))
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	file_table_entry* f = file_table[fd];
 
@@ -376,7 +359,7 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	}
 	else {
 		// TODO: file system read
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 	}
 }
 
@@ -393,13 +376,13 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	fildes_t fd = L4_MsgWord(msg_p, 0);
 	int to_write = L4_MsgWord(msg_p, 1);
 
 	if(!can_write(tid, fd) || to_write > IPC_MEMORY_SIZE)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	// do lookup and call write function
 	file_table_entry* f = file_table[fd];
@@ -420,12 +403,12 @@ int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
  */
 int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(L4_UntypedWords(msg_p->tag) != 1)
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	fildes_t fd = L4_MsgWord(msg_p, 0);
 
 	if(!can_close(tid, fd))
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 
 	if(is_special_filedescriptor(fd)) {
 
@@ -441,6 +424,6 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	}
 	else {
 		// TODO: close on file system
-		return set_ipc_reply(msg_p, 1, -1);
+		return IPC_SET_ERROR(-1);
 	}
 }

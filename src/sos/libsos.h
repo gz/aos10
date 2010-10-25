@@ -13,6 +13,7 @@
 
 #include <stdint.h>
 #include <l4/types.h>
+#include <l4/ipc.h>
 #include <l4/bootinfo.h>
 
 //
@@ -144,5 +145,18 @@ extern void sos_usleep(uint32_t microseconds);
 // XXX Hack: should look this up in kip
 // #define PAGESIZE (L4_PageSizeMask(kip) + 1)
 #define PAGESIZE 4096
+
+
+/**
+ * This function sets a variable number of words
+ * in msg_p and stores the message for sending
+ * afterwards.
+ *
+ * @return always 1 this is useful because we can
+ * just return ipc_set_reply in our syscall
+ * handlers and they will automatically send this
+ * reply in the syscall loop.
+ */
+int set_ipc_reply(L4_Msg_t* msg_p, int, ...);
 
 #endif // _LIBSOS_H

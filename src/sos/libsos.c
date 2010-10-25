@@ -15,6 +15,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sos_shared.h>
 
 #include <l4/types.h>
 
@@ -386,4 +387,24 @@ void *sos_malloc(uint32_t size)
 void sos_usleep(uint32_t microseconds)
 {
     utimer_sleep(microseconds);	// M4 must change to your timer
+}
+
+
+int set_ipc_reply(L4_Msg_t* msg_p, int args, ...) {
+	assert(args < IPC_MAX_WORDS);
+
+	L4_MsgClear(msg_p);
+
+    // Appending Data Words
+	va_list ap;
+	va_start(ap, args);
+    for(int i = 0; i < args; i++) {
+    	L4_MsgAppendWord(msg_p, va_arg(ap, L4_Word_t));
+    }
+    va_end(ap);
+
+
+    L4_MsgLoad(msg_p);
+
+    return 1;
 }
