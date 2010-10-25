@@ -8,6 +8,7 @@ typedef int fildes_t;
 /* Limits */
 #define PROCESS_MAX_FILES 16
 #define MAX_IO_BUF 0x1000
+#define MAX_PATH_LENGTH 255
 
 /* file modes */
 #define FM_WRITE 1

@@ -8,29 +8,32 @@
 struct fentry;
 typedef struct fentry {
 	char identifier[N_NAME];
+	L4_ThreadId_t owner;
 
 	data_ptr buffer;
-	int pos_write;
-	int pos_read;
+	int write_position;
+	int read_position;
 
 	data_ptr destination;
-	L4_ThreadId_t reader_tid;
+
 	L4_Bool_t reader_blocking;
 	L4_Bool_t double_overflow;
-	int to_read;
+	L4_Word_t to_read;
 
 	struct serial* serial_handle;
 	int (*write)(struct fentry*, int, data_ptr);
-	int (*read)(struct fentry*, int, data_ptr);
+	void (*read)(struct fentry*);
 } file_table_entry;
 
 #define SPECIAL_FILES 1
-file_table_entry special_table[SPECIAL_FILES];
+#define FILE_TABLE_ENTRIES SPECIAL_FILES
+file_table_entry* file_table[FILE_TABLE_ENTRIES];
 
 
 void io_init(void);
-void open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int read_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
-void write_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int write_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int close_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
 #endif /* IO_H_ */

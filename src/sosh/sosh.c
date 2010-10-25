@@ -241,8 +241,7 @@ int main(void)
     new  = 1;
 
 
-    int sent = printf("\n[SOS Starting]\n");
-    printf("bytes sent by printf: %d\n", sent);
+    printf("\n[SOS Starting]\n");
 
     while (!done) {
 	if (new) {

@@ -67,7 +67,7 @@ for(int i=0; i<4096; i++) {
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 3
+#define verbose 0
 
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)

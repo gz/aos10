@@ -7,27 +7,81 @@
 #include "libsos.h"
 #include "sos_serial.h"
 
-
 #define verbose 1
 
 // Buffer for console read
 #define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
 
-static int copy_console_buffer(file_table_entry* f) {
+#include <stdarg.h>
+static int set_ipc_reply(L4_Msg_t* msg_p, int args, ...) {
+	assert(args < IPC_MAX_WORDS);
+
+	L4_MsgClear(msg_p);
+
+    // Appending Data Words
+	va_list ap;
+	va_start(ap, args);
+    for(int i = 0; i < args; i++) {
+    	L4_MsgAppendWord(msg_p, va_arg(ap, L4_Word_t));
+    }
+    va_end(ap);
+
+
+    L4_MsgLoad(msg_p);
+
+    return 1;
+}
+
+/** Test to see whether a given file is a special file or not */
+inline static L4_Bool_t is_special_file(file_table_entry* f) {
+	return f != NULL && f->serial_handle != NULL;
+}
+
+/** Test to see whether a given file descriptor represents a special file or not */
+inline static L4_Bool_t is_special_filedescriptor(fildes_t fd) {
+	return fd >= 0 && fd < SPECIAL_FILES;
+}
+
+/** Checks if a file descriptor is within the file table range and the entry is currently not NULL */
+inline static L4_Bool_t is_valid_filedescriptor(fildes_t fd) {
+	return 0 <= fd && fd < FILE_TABLE_ENTRIES && file_table[fd] != NULL;
+}
+
+/** Checks if a given thread can write to a file represented by file descriptor fd */
+inline static L4_Bool_t can_write(L4_ThreadId_t tid, fildes_t fd) {
+	L4_Bool_t valid = is_valid_filedescriptor(fd);
+	L4_Bool_t can_write = is_special_filedescriptor(fd) || L4_IsThreadEqual(file_table[fd]->owner, tid);
+	return valid && can_write;
+}
+
+/** Checks if a given thread can read to a file represented by file descriptor fd */
+inline static L4_Bool_t can_read(L4_ThreadId_t tid, fildes_t fd) {
+	return is_valid_filedescriptor(fd) && L4_IsThreadEqual(file_table[fd]->owner, tid);
+}
+
+/** Checks if a given thread can close a file represented by file descriptor fd */
+inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
+	return is_valid_filedescriptor(fd) && L4_IsThreadEqual(file_table[fd]->owner, tid);
+}
+
+
+static void read_serial(file_table_entry* f) {
 
 	// check f->to_read against buffer fill and determine how many chars should be sent
-	L4_Word_t max_send = min(f->to_read,READ_BUFFER_SIZE-1);
-	L4_Word_t to_send = min((READ_BUFFER_SIZE+f->pos_write-f->pos_read)%READ_BUFFER_SIZE,max_send);
+	L4_Word_t max_send = min(f->to_read, READ_BUFFER_SIZE-1);
+	L4_Word_t to_send = min((READ_BUFFER_SIZE + f->write_position - f->read_position) % READ_BUFFER_SIZE, max_send);
 
 	if(to_send > 0 && f->reader_blocking) {
 
+		dprintf(3, "copy_console_buffer: f->reader_blocking: %d\n", f->reader_blocking);
+
 		// copy the contents of the circular buffer to the shared memory location
-		if (f->pos_read < f->pos_write)
-			memcpy(f->destination, &f->buffer[f->pos_read], f->pos_write - f->pos_read);
+		if (f->read_position < f->write_position)
+			memcpy(f->destination, &f->buffer[f->read_position], f->write_position - f->read_position);
 		else {
-			memcpy(f->destination, &f->buffer[f->pos_read], READ_BUFFER_SIZE-f->pos_read);
-			memcpy(&f->destination[READ_BUFFER_SIZE - f->pos_read], f->buffer, f->pos_write);
+			memcpy(f->destination, &f->buffer[f->read_position], READ_BUFFER_SIZE-f->read_position);
+			memcpy(&f->destination[READ_BUFFER_SIZE - f->read_position], f->buffer, f->write_position);
 		}
 
 		// ensure that there is a newline at the end
@@ -38,22 +92,17 @@ static int copy_console_buffer(file_table_entry* f) {
 
 		L4_Set_MsgTag(tag);
 	    L4_MsgClear(&msg);
-	    dprintf(0, "f->reader_tid: 0x%X\n", f->reader_tid.raw);
-	    dprintf(0, "f->pos_read: %d\n", f->pos_read);
-	    dprintf(0, "f->pos_write: %d\n", f->pos_write);
-	    dprintf(0, "to_send: %d\n", to_send);
-
 	    L4_MsgAppendWord(&msg, to_send);
-
 
 	    // Set Label and prepare message
 	    L4_Set_MsgLabel(&msg, SOS_READ << 4);
 	    L4_MsgLoad(&msg);
 
 	    // Sending Message
+		tag = L4_Reply(f->owner);
+
 	    f->reader_blocking = FALSE;
 	    f->double_overflow = FALSE;
-		tag = L4_Reply(f->reader_tid);
 
 
 		if(L4_IpcFailed(tag)) {
@@ -64,12 +113,21 @@ static int copy_console_buffer(file_table_entry* f) {
 		}
 		else {
 			// increment read pointer
-			f->pos_read = (f->pos_read + to_send) % READ_BUFFER_SIZE;
+			f->read_position = (f->read_position + to_send) % READ_BUFFER_SIZE;
 		}
 	}
+}
 
-	return 0;
 
+static inline file_table_entry* get_file_handle_for_serial(struct serial* ser) {
+	file_table_entry* f = NULL;
+
+	for(int i=0; i<SPECIAL_FILES; i++) {
+		if(file_table[i]->serial_handle == ser)
+			f = file_table[i];
+	}
+
+	return f;
 }
 
 
@@ -80,37 +138,34 @@ static int copy_console_buffer(file_table_entry* f) {
  * @param c received char
  */
 static void serial_receive_handler(struct serial* ser, char c) {
-	// debug out
-	dprintf(0,"%c",c);
 
 	// get file_table_entry pointer
-	file_table_entry* f = &special_table[0];
+	file_table_entry* f = get_file_handle_for_serial(ser);
 	assert(f != NULL);
-	assert(f->reader_tid.raw != 0);
 
-	// if the buffer is full for the 2nd time, drop whatever follows
-	if (f->double_overflow)
-		return;
+	if(f->double_overflow)
+		return; // if the buffer is full for the 2nd time, drop whatever follows
 
 	// add char to circular buffer
-	f->buffer[f->pos_write] = c;
-	f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
+	f->buffer[f->write_position] = c;
+	f->write_position = (f->write_position + 1) % READ_BUFFER_SIZE;
 
-	// if end of the buffer (but one char) has been reached, add newline and send text
-	if ((f->pos_write+2) % READ_BUFFER_SIZE == f->pos_read) {
-		f->buffer[f->pos_write] = '\n';
-		f->pos_write = (f->pos_write + 1) % READ_BUFFER_SIZE;
-		// if the buffer is full for the 2nd time, drop whatever follows
+	// end of the buffer (but one char) has been reached, add newline and send text
+	if ((f->write_position+2) % READ_BUFFER_SIZE == f->read_position) {
+
+		f->buffer[f->write_position] = '\n';
+		f->write_position = (f->write_position + 1) % READ_BUFFER_SIZE;
+
 		if (!f->reader_blocking) {
-			f->double_overflow = TRUE;
+			f->double_overflow = TRUE; // buffer is full for the 2nd time, drop whatever follows
 			dprintf(0, "\nDouble console read buffer overflow. We're starting to loose things here :-(.\n");
 			return;
 		}
-		copy_console_buffer(f);
+
+		f->read(f);
 	}
-	// if newline found, just send text
 	else if (c == '\n')
-		copy_console_buffer(f);
+		f->read(f);
 }
 
 /**
@@ -157,80 +212,186 @@ static int write_serial(file_table_entry* f, int to_send, char* buffer) {
 	return total_sent;
 }
 
-
-inline static L4_Bool_t is_special_file(file_table_entry* f) {
-	return f != NULL && f->serial_handle != NULL;
-}
-
-
 void io_init() {
 	dprintf(0, "io_init called\n");
+
+	file_table[0] = malloc(sizeof(file_table_entry)); // This is never free'd but its okay
+
 	// initializing console special file
-	strcpy(special_table[0].identifier, "console");
-	special_table[0].reader_tid = L4_nilthread;
-	special_table[0].reader_blocking = FALSE;
-	special_table[0].double_overflow = FALSE;
-	special_table[0].to_read = 0;
-	special_table[0].buffer = (data_ptr) &read_buffer;
-	special_table[0].pos_write = 0;
-	special_table[0].pos_read = 0;
-	special_table[0].destination = NULL;
-	special_table[0].serial_handle = console_init();
-	//special_table[0].serial_handle->file = &special_table[0];
-	special_table[0].read = NULL;
-	special_table[0].write = &write_serial;
+	strcpy(file_table[0]->identifier, "console");
+	file_table[0]->owner = L4_nilthread;
+	file_table[0]->reader_blocking = FALSE;
+	file_table[0]->double_overflow = FALSE;
+	file_table[0]->to_read = 0;
+	file_table[0]->buffer = (data_ptr) &read_buffer;
+	file_table[0]->write_position = 0;
+	file_table[0]->read_position = 0;
+	file_table[0]->destination = NULL;
+	file_table[0]->serial_handle = console_init();
+	//file_table[0]->serial_handle->file = file_table[0];
+	file_table[0]->read = &read_serial;
+	file_table[0]->write = &write_serial;
 
-	//assert(special_table[0].serial_handle->file == &special_table[0]);
+	//assert(file_table[0]->serial_handle->file == file_table[0]);
 }
 
+/**
+ * Searches for a given file in the special filetable.
+ *
+ * @param name of file to search for
+ * @return index in special_table or -1 if not found
+ */
+static fildes_t find_special_file(data_ptr name) {
 
-void open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	dprintf(0, "got open file..\n");
-}
-
-
-int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	int fd = L4_MsgWord(msg_p, 0);
-	int to_read = L4_MsgWord(msg_p, 1);
-
-	//dprintf(0, "to_read is: %d\n", to_read);
-	//dprintf(0, "fd is: %d\n", fd);
-
-	assert(fd == 0); // TODO: only console supported right now
-
-	file_table_entry* f = &special_table[fd];
-
-	if(is_special_file(f)) {
-
-		f->reader_tid = tid; // TODO: hack
-		f->reader_blocking = TRUE;
-		f->to_read = to_read;
-		f->destination = buf;
-
-		copy_console_buffer(f);
+	for(int i=0; i<SPECIAL_FILES; i++) {
+		if(strcmp(file_table[i]->identifier, name) == 0)
+			return i;
 	}
 
-
-    return 0;
+	return -1;
 }
 
 
 /**
+ * System Call handler for open() calls. This functions works in the following
+ * way:
+ *  1. Check if there is a special (i.e. console) device with the given name
+ * 	2. Check if there is a file in the file system with the given name [TODO]
+ *  3. Create the file on the file system if not found yet [TODO]
  *
- * @param tid
- * @param msg_p
- * @param buf
+ * A IPC message is sent back to the callee containing the file descriptor
+ * or -1 on error.
+ *
+ * TODO: A failed attempt to open the console for reading (because it is already
+ * open) will result in a context switch to reduce the cost of busy waiting
+ * for the console.
+ *
+ * @param tid Caller Thread ID
+ * @param msg_p IPC Message containing requested file access mode in Word 0
+ * @param name filename requested for opening
+ *
  */
-void write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
+
+	if(name == NULL || L4_UntypedWords(msg_p->tag) != 1)
+		return set_ipc_reply(msg_p, 1, -1);
+
+	fmode_t mode = L4_MsgWord(msg_p, 0);
+	fildes_t fd = -1;
+
+	if(mode != O_RDONLY && mode != O_RDWR && mode != O_WRONLY)
+		return set_ipc_reply(msg_p, 1, -1);
+
+	// make sure our name is really \0 terminated
+	// so no client can trick us into reading garbage by calling string functions on this
+	name[MAX_PATH_LENGTH+1] = '\0';
+
+	if( (fd = find_special_file(name)) != -1 ) {
+		file_table_entry* f = file_table[fd];
+
+		// user tries to open a special file
+		// special files allow multiple writer single reader
+		if(mode == O_RDONLY || mode == O_RDWR) {
+
+			// one process is allowed to open the special device for reading multiple times
+			if(f->owner.raw == 0 || f->owner.raw == tid.raw)
+				f->owner = tid;
+			else
+				return set_ipc_reply(msg_p, 1, -1); // error: only one process allowed for writing
+
+		}
+		return set_ipc_reply(msg_p, 1, fd); // writing always allowed, return file descriptor
+
+	} // else TODO: handle file system access
+
+
+	// reply with either file descriptor or fd equals -1
+	return set_ipc_reply(msg_p, 1, fd);
+}
+
+
+int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+
+	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
+		return set_ipc_reply(msg_p, 1, -1);
+
 	int fd = L4_MsgWord(msg_p, 0);
-	assert(fd == 0); // TODO: only console supported right now
+	size_t to_read = L4_MsgWord(msg_p, 1);
 
-	file_table_entry* f = &special_table[fd];
+	if(!can_read(tid, fd))
+		return set_ipc_reply(msg_p, 1, -1);
 
+	file_table_entry* f = file_table[fd];
+
+	if(is_special_file(f)) {
+
+		f->reader_blocking = TRUE;
+		f->to_read = to_read;
+		f->destination = buf;
+
+		f->read(f);
+		return 0; // ipc return is handled by
+				  // the serial interrupt (or f->read(f))
+	}
+	else {
+		// TODO: file system read
+		return set_ipc_reply(msg_p, 1, -1);
+	}
+
+}
+
+
+int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+
+	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 2)
+		return set_ipc_reply(msg_p, 1, -1);
+
+	fildes_t fd = L4_MsgWord(msg_p, 0);
 	int to_write = L4_MsgWord(msg_p, 1);
+
+	if(!can_write(tid, fd) || to_write > IPC_MEMORY_SIZE)
+		return set_ipc_reply(msg_p, 1, -1);
+
+	// do lookup and call write function
+	file_table_entry* f = file_table[fd];
 	int written = f->write(f, to_write, buf);
 
-	L4_MsgClear(msg_p);
-    L4_MsgAppendWord(msg_p, written);
-    L4_MsgLoad(msg_p);
+	return set_ipc_reply(msg_p, 1, written);
+}
+
+
+/**
+ * System Call handler for closing a file.
+ * For special files this function will unset the
+ * reader_tid if the reader closes the file.
+ *
+ * @param tid Callee ID
+ * @param msg_p IPC message
+ * @param buf Shared memory pointer (ignored)
+ */
+int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	if(L4_UntypedWords(msg_p->tag) != 1)
+		return set_ipc_reply(msg_p, 1, -1);
+
+	fildes_t fd = L4_MsgWord(msg_p, 0);
+
+	if(!can_close(tid, fd))
+		return set_ipc_reply(msg_p, 1, -1);
+
+	if(is_special_filedescriptor(fd)) {
+
+		if(L4_IsThreadEqual(file_table[fd]->owner, tid)) {
+			file_table[fd]->owner = L4_nilthread;
+			file_table[fd]->reader_blocking = FALSE;
+		}
+
+		// closing special file is always a success
+		// since we can have multiple writers which we don't track
+		return set_ipc_reply(msg_p, 1, 0);
+
+	}
+	else {
+		// TODO: close on file system
+		return set_ipc_reply(msg_p, 1, -1);
+	}
 }

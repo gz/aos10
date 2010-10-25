@@ -1,13 +1,14 @@
 #include "sos.h"
 
+#include <assert.h>
+#include <stdarg.h>
 #include <l4/kdebug.h>
 #include <l4/ipc.h>
 
 L4_MsgTag_t system_call(int type, L4_Msg_t* msg_p, int args, ...) {
+	assert(args < IPC_MAX_WORDS);
 
-    L4_Accept( L4_UntypedWordsAcceptor );
-
-
+    L4_Accept(L4_UntypedWordsAcceptor);
     L4_MsgClear(msg_p);
 
     // Appending Data Words
@@ -19,7 +20,7 @@ L4_MsgTag_t system_call(int type, L4_Msg_t* msg_p, int args, ...) {
     va_end(ap);
 
     // Set Label and prepare message
-    L4_Set_MsgLabel(msg_p, type << 4);
+    L4_Set_MsgLabel(msg_p, CREATE_SYSCALL_NR(type));
     L4_MsgLoad(msg_p);
 
     // Sending Message

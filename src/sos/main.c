@@ -145,14 +145,19 @@ static __inline__ void syscall_loop(void)
 
 			/* our system calls */
 			case SOS_OPEN:
-				open_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+				send = open_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+			break;
 
 			case SOS_READ:
 				send = read_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
 			break;
 
 			case SOS_WRITE:
-				write_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+				send = write_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+			break;
+
+			case SOS_CLOSE:
+				send = close_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
 			break;
 
 			case SOS_UNMAP_ALL:
@@ -160,9 +165,6 @@ static __inline__ void syscall_loop(void)
 				send = 0;
 			break;
 
-			/*case SOS_OPEN:
-				send = open_file(tid, &msg);
-			break;*/
 
 			/* error? */
 			default:

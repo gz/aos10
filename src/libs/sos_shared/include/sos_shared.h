@@ -19,6 +19,7 @@
 typedef char* data_ptr;
 
 /* Predefined area in virtual address layout for IPC communication */
+#define IPC_MEMORY_SIZE 0x10000
 static const data_ptr ipc_memory_start = (data_ptr) 0x60000000;
 
 

@@ -15,8 +15,9 @@
 #define SOS_OPEN 1
 #define SOS_READ 2
 #define SOS_WRITE 3
+#define SOS_CLOSE 4
 
-#define SOS_UNMAP_ALL 4
+#define SOS_UNMAP_ALL 5
 
 
 
