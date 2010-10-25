@@ -20,6 +20,8 @@ static int copy_console_buffer(file_table_entry* f) {
 	L4_Word_t max_send = min(f->to_read,READ_BUFFER_SIZE);
 	L4_Word_t to_send = min((READ_BUFFER_SIZE+f->pos_write-f->pos_read)%READ_BUFFER_SIZE,max_send);
 
+    dprintf(0, "f->reader_blocking: %d\n", f->reader_blocking);
+
 	if(to_send > 0 && f->reader_blocking) {
 
 		// copy the contents of the circular buffer to the shared memory location
@@ -32,13 +34,13 @@ static int copy_console_buffer(file_table_entry* f) {
 
 		// ensure that there is a newline at the end
 		assert(f->destination[to_send-1] == '\n');
+
+		// debug output of destination buffer
 		char* locbuf = malloc(to_send+1);
 		memcpy(locbuf,f->destination,to_send);
 		locbuf[to_send] = '\0';
 	    dprintf(0, "f->destination: %s\n", locbuf);
 	    free(locbuf);
-//		if (to_send == max_send && max_send > 0)
-//			f->destination[max_send-1] = '\n';
 
 		L4_MsgTag_t tag;
 		L4_Msg_t msg;
