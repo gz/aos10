@@ -79,7 +79,7 @@ for(int i=0; i<4096; i++) {
 #define IPC_START 0x60000000
 #define IPC_END (IPC_START + 4096)
 
-#define HEAP_START 0x4000000
+#define HEAP_START 0x40000000
 #define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
 
 // Page table Macros and constants

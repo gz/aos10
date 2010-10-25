@@ -24,10 +24,10 @@ static int copy_console_buffer(file_table_entry* f) {
 
 		// copy the contents of the circular buffer to the shared memory location
 		if (f->pos_read < f->pos_write)
-			memcpy(f->destination, &f->buffer[f->pos_read], f->pos_write-f->pos_read);
+			memcpy(f->destination, &f->buffer[f->pos_read], f->pos_write - f->pos_read);
 		else {
 			memcpy(f->destination, &f->buffer[f->pos_read], READ_BUFFER_SIZE-f->pos_read);
-			memcpy(&f->destination[READ_BUFFER_SIZE-f->pos_read], f->buffer, f->pos_write);
+			memcpy(&f->destination[READ_BUFFER_SIZE - f->pos_read], f->buffer, f->pos_write);
 		}
 
 		// ensure that there is a newline at the end
@@ -61,6 +61,7 @@ static int copy_console_buffer(file_table_entry* f) {
 			L4_Word_t ec = L4_ErrorCode();
 			dprintf(0, "%s: Console read IPC callback has failed. User thread not blocking?\n", __FUNCTION__);
 			sos_print_error(ec);
+			f->reader_blocking = TRUE;
 		}
 		else {
 			f->pos_read = (f->pos_read + to_send) % READ_BUFFER_SIZE;

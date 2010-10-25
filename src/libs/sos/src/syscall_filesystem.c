@@ -45,7 +45,7 @@ int read(fildes_t file, char* buf, size_t to_read) {
 
 	memcpy(buf, ipc_memory_start, received);
 
-	buf[recieved] = '\0';
+	buf[received] = '\0';
 	printf("received: %lu\n", received);
 	printf("got string msg: %s\n", buf);
 
