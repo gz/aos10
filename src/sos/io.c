@@ -1,3 +1,29 @@
+/**
+ * File System
+ * =============
+ * This file contains the handlers for read/write/open/close syscalls.
+ *
+ * Currently we support only special files (i.e. the console file).
+ *
+ * All files are tracked in the `file_table` and are identified by
+ * a file descriptor which is corresponds to the index for the given
+ * file in the file table. The layout of a `file_table_entry` is
+ * described in io.h.
+ * File descriptors with valued below SPECIAL_FILES are treated as
+ * special files they can have multiple writers but only one reader
+ * thread at a time.
+ * The special file called console is created in io_init. It's
+ * file descriptor is 0 which corresponds to the stdout_fd defined
+ * in sos.h (libsos).
+ *
+ * Limitations:
+ * ------------------------------------
+ * To make the open call more secure we introduced a MAX_PATH_LENGTH
+ * of 255 characters. Because of the way we share memory on IPC calls
+ * a limit of PAGESIZE-1 would be
+ *
+ */
+
 #include <serial.h>
 #include <string.h>
 #include <assert.h>
@@ -21,15 +47,18 @@ inline static L4_Bool_t is_special_file(file_table_entry* f) {
 	return f != NULL && f->serial_handle != NULL;
 }
 
+
 /** Test to see whether a given file descriptor represents a special file or not */
 inline static L4_Bool_t is_special_filedescriptor(fildes_t fd) {
 	return fd >= 0 && fd < SPECIAL_FILES;
 }
 
+
 /** Checks if a file descriptor is within the file table range and the entry is currently not NULL */
 inline static L4_Bool_t is_valid_filedescriptor(fildes_t fd) {
 	return 0 <= fd && fd < FILE_TABLE_ENTRIES && file_table[fd] != NULL;
 }
+
 
 /** Checks if a given thread can write to a file represented by file descriptor fd */
 inline static L4_Bool_t can_write(L4_ThreadId_t tid, fildes_t fd) {
@@ -38,10 +67,12 @@ inline static L4_Bool_t can_write(L4_ThreadId_t tid, fildes_t fd) {
 	return valid && can_write;
 }
 
+
 /** Checks if a given thread can read to a file represented by file descriptor fd */
 inline static L4_Bool_t can_read(L4_ThreadId_t tid, fildes_t fd) {
 	return is_valid_filedescriptor(fd) && L4_IsThreadEqual(file_table[fd]->owner, tid);
 }
+
 
 /** Checks if a given thread can close a file represented by file descriptor fd */
 inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
@@ -267,7 +298,6 @@ void io_init() {
 	file_table[0]->write = &write_serial;
 
 }
-
 
 
 /**
