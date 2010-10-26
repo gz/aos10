@@ -314,13 +314,12 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 
 /**
+ * System call handler
  * This function unmaps all fpages for a given thread mapped to physical
- * memory by the pager. And flushes the CPU Cache. It gets called by
- * the syscall SOS_UNMAP_ALL.
+ * memory by the pager. And flushes the CPU Cache.
  *
- * @param tid thread id to flush
  */
-void pager_unmap_all(L4_ThreadId_t tid) {
+int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	// TODO: select first level table based on tid
 
@@ -348,6 +347,8 @@ void pager_unmap_all(L4_ThreadId_t tid) {
 
 	// make sure to flush the cache otherwise there might still be some mappings in the cache
 	L4_CacheFlushAll();
+
+	return 0; // send no reply
 }
 
 

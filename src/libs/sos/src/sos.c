@@ -35,6 +35,24 @@ L4_MsgTag_t system_call(int type, L4_Msg_t* msg_p, int args, ...) {
 }
 
 
+void sos_debug_flush(void) {
+    L4_Msg_t msg;
+    L4_MsgTag_t tag;
+
+    L4_MsgClear(&msg);
+    L4_Set_MsgLabel(&msg, CREATE_SYSCALL_NR(SOS_UNMAP_ALL));
+	L4_MsgLoad(&msg);
+
+	tag = L4_Send(L4_Pager());
+
+	if (L4_IpcFailed(tag)) {
+		L4_Word_t err = L4_ErrorCode();
+		printf("sos_debug_flush failed (error: %lx)\n", err);
+	}
+
+}
+
+
 void abort(void) {
 	L4_KDB_Enter("sos abort()ed");
 	while(1); /* We don't return after this */

@@ -134,4 +134,7 @@ void sleep(int msec);
 int share_vm(void *adr, size_t size, int writable);
 
 
+/* Debug Syscalls */
+void sos_debug_flush(void);
+
 #endif
