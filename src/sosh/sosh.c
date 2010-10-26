@@ -284,7 +284,7 @@ int main(void)
 		    new   = 1;
 		    break;
 		} else {
-		    printf("%c",*p);
+			printf("%c",*p);
 		}
 	    }
 	    bp = p;

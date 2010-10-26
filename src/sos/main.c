@@ -138,7 +138,7 @@ static __inline__ void syscall_loop(void)
 					reply = sysent[sysnr](tid, &msg, ipc_memory);
 				}
 				else {
-					dprintf(0, "Syscall#%d not supported by SOS Server.", sysnr);
+					dprintf(0, "Syscall#%d not supported by SOS Server.\n", sysnr);
 					set_ipc_reply(&msg, 1, -1);
 				}
 			}
@@ -146,7 +146,7 @@ static __inline__ void syscall_loop(void)
 
 			// Handle unknown IPC messages
 			default:
-				dprintf(0, "Got unknown system call (%d).", sysnr);
+				dprintf(0, "Got unknown system call (%d).\n", sysnr);
 				sos_print_l4memory(&msg, L4_UntypedWords(tag) * sizeof(L4_Word_t));
 				reply = 0;
 			break;
