@@ -22,6 +22,9 @@
  * The convention we used was to store 4 byte words in IPC messages
  * and use the shared memory if we had strings or buffers to share.
  *
+ * A syscall handler returns 0 or 1 which is used by the syscall loop
+ * to determine if it should send back a message or not.
+ *
  */
 
 #include <assert.h>
