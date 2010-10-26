@@ -28,6 +28,7 @@
 #include <string.h>
 #include <assert.h>
 #include <l4/ipc.h>
+#include <l4/schedule.h>
 
 #include "io.h"
 #include "libsos.h"
@@ -342,8 +343,12 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
 			// one process is allowed to open the special device for reading multiple times
 			if(f->owner.raw == 0 || f->owner.raw == tid.raw)
 				f->owner = tid;
-			else
-				return IPC_SET_ERROR(-1); // error: only one process allowed for writing
+			else {
+				// switch to the owner of the special file to reduce busy waiting for
+				// the callee
+				L4_ThreadSwitch(f->owner);
+				return IPC_SET_ERROR(-1); // only one process allowed for writing
+			}
 
 		}
 		return set_ipc_reply(msg_p, 1, fd); // writing always allowed, return file descriptor
