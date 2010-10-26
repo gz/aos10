@@ -12,12 +12,11 @@
 #define L4_PAGEFAULT	((L4_Word_t) -2)
 #define L4_INTERRUPT	((L4_Word_t) -1)
 
-#define SOS_OPEN 1
-#define SOS_READ 2
-#define SOS_WRITE 3
-#define SOS_CLOSE 4
-
-#define SOS_UNMAP_ALL 5
+#define SOS_OPEN 0
+#define SOS_READ 1
+#define SOS_WRITE 2
+#define SOS_CLOSE 3
+#define SOS_UNMAP_ALL 4
 
 
 

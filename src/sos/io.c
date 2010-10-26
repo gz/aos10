@@ -31,7 +31,6 @@
 
 #include "io.h"
 #include "libsos.h"
-#include "sos_serial.h"
 
 #define verbose 1
 
@@ -279,7 +278,6 @@ static int write_serial(file_table_entry* f, int to_send, char* buffer) {
  * console.
  */
 void io_init() {
-	dprintf(0, "io_init called\n");
 
 	file_table[0] = malloc(sizeof(file_table_entry)); // This is never free'd but its okay
 

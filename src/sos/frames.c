@@ -18,7 +18,7 @@
 
 #include "frames.h"
 
-#define verbose 3
+#define verbose 0
 
 #define BITS_PER_CHAR 8
 

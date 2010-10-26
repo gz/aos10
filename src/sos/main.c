@@ -21,36 +21,27 @@
 
 #include "pager.h"
 #include "frames.h"
-#include "frames_test.h"
-
 #include "io.h"
-#include "sos_serial.h"
+#include "sysent.h"
 
 #include "../libs/c/src/k_r_malloc.h"
 
 #define verbose 2
 
 #define ONE_MEG	    (1 * 1024 * 1024)
-
 #define HEAP_SIZE   ONE_MEG*4 /* 4 MB heap */
 
-
-/* Set aside some memory for a stack for the
- * first user task 
- */
+/** Set aside some memory for a init stack */
 #define STACK_SIZE 0x1000
 static L4_Word_t init_stack_s[STACK_SIZE];
-//static L4_Word_t user_stack_s[STACK_SIZE];
 
 
-// Init thread - This function starts up our device drivers and runs the first
-// user program.
+/** Init thread - This function starts up our device drivers and runs the first user program. */
 static void init_thread(void)
 {
     // Initialise the network for libsos_logf_init
     network_init();
 	io_init();
-
 
     // Loop through the BootInfo starting executables
     int i;
@@ -68,13 +59,6 @@ static void init_thread(void)
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
-   // (*(L4_Word_t*) RCVWIND) = 1;
-
-    //dprintf(0, "Calling frame test:\n");
-    //frame_test1();
-    //frame_test2();
-    //frame_test3();
-    //frame_test4();
 
     // Thread finished - block forever
     for (;;)
@@ -82,23 +66,22 @@ static void init_thread(void)
 }
 
 
-/*
-  Syscall loop.
-
-  This implements a very simple, single threaded functions for 
-  recieving any IPCs and dispatching to the correct subsystem.
-
-  It currently handles pagefaults, interrupts and special sigma0
-  requests.
-*/
+/**
+ * Syscall loop
+ * This implements a simple, single threaded server for
+ * receiving IPCs and dispatching to the correct subsystem.
+ *
+ * Note: This function should never return.
+ */
 static __inline__ void syscall_loop(void)
 {
     dprintf(3, "Entering %s\n", __FUNCTION__);
 
-    // Setup which messages we will recieve
+    init_systable();
+
     L4_Accept(L4_UntypedWordsAcceptor);
     
-    int send = 0;
+    int reply = 0;
     L4_Msg_t msg;
     L4_ThreadId_t tid = L4_nilthread;
 
@@ -107,72 +90,68 @@ static __inline__ void syscall_loop(void)
 		L4_MsgTag_t tag;
 
 		// Wait for a message, sometimes sending a reply
-		if (!send)
-			tag = L4_Wait(&tid); // Nothing to send, so we just wait
+		if (!reply)
+			// Nothing to send, so we just wait
+			tag = L4_Wait(&tid);
 		else
-			tag = L4_ReplyWait(tid, &tid); // Reply to caller and wait for IPC
+			// Reply to caller and wait for IPC
+			tag = L4_ReplyWait(tid, &tid);
 
 		if (L4_IpcFailed(tag)) {
 			L4_Word_t ec = L4_ErrorCode();
 			dprintf(0, "%s: IPC error\n", __FUNCTION__);
 			sos_print_error(ec);
-			assert( !(ec & 1) );	// Check for recieve error and bail
-			send = 0;
+			assert( !(ec & 1) ); // Check for receive error and bail
+			reply = 0;
 			continue;
 		}
 
-		// At this point we have, probably, recieved an IPC
-		L4_MsgStore(tag, &msg); /* Get the tag */
+		// At this point we have, probably, received an IPC
+		L4_MsgStore(tag, &msg);
 
-		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__,
-			 L4_ThreadNo(tid), (int) GET_SYSCALL_NR(tag),
-			 (void *) L4_MsgWord(&msg, 0));
+		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__, L4_ThreadNo(tid), (int) GET_SYSCALL_NR(tag), (void *) L4_MsgWord(&msg, 0));
 
-		//
+		reply = 1; // In most cases we will want to send a reply
+		int sysnr = GET_SYSCALL_NR(tag);
+
 		// Dispatch IPC according to protocol.
-		//
-		send = 1; /* In most cases we will want to send a reply */
-		switch (GET_SYSCALL_NR(tag)) {
+		switch (sysnr) {
+
+			// Handle L4 Pagefaults
 			case L4_PAGEFAULT:
 				pager(tid, &msg);
 			break;
 
+			// Handle Interrupts
 			case L4_INTERRUPT:
 				if (0); // Received an interrupt, you need to implement this side
 				else
-				network_irq(&tid, &send);
+				network_irq(&tid, &reply);
 			break;
 
-			/* our system calls */
-			case SOS_OPEN:
-				send = open_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
+			// Handle System calls
+			case 0 ... SYSENT_SIZE-1:
+			{
+				data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
+
+				if(sysent[sysnr] != NULL) {
+					reply = sysent[sysnr](tid, &msg, ipc_memory);
+				}
+				else {
+					dprintf(0, "Syscall#%d not supported by SOS Server.", sysnr);
+					set_ipc_reply(&msg, 1, -1);
+				}
+			}
 			break;
 
-			case SOS_READ:
-				send = read_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
-			break;
-
-			case SOS_WRITE:
-				send = write_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
-			break;
-
-			case SOS_CLOSE:
-				send = close_file(tid, &msg, pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start));
-			break;
-
-			case SOS_UNMAP_ALL:
-				pager_unmap_all(tid);
-				send = 0;
-			break;
-
-
-			/* error? */
+			// Handle unknown IPC messages
 			default:
-				// Unknown system call, so we don't want to reply to this thread
-				sos_print_l4memory(&msg, L4_UntypedWords(tag) * sizeof(uint32_t));
-				send = 0;
+				dprintf(0, "Got unknown system call (%d).", sysnr);
+				sos_print_l4memory(&msg, L4_UntypedWords(tag) * sizeof(L4_Word_t));
+				reply = 0;
 			break;
 		}
+
     }
 }
 
@@ -195,7 +174,7 @@ int main(void)
     frame_init((low + HEAP_SIZE), high);
     pager_init();
 
-    // Spawn the setup thread which completes the rest of the initialisation,
+    // Spawn the setup thread which completes the rest of the initialization,
     // leaving this thread free to act as a pager and interrupt handler.
     sos_thread_new(&init_thread, &init_stack_s[STACK_SIZE]);
 

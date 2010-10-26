@@ -1,6 +1,6 @@
 Import("env")
 
-#srcs = "sos.c syscall_filesystem.c syscall_process.c syscall_timer.c tty.c"
+#srcs = "sos.c syscall_io.c syscall_process.c syscall_timer.c tty.c"
 
 lib = env.MyLibrary("sos", LIBS=["c", "l4", "sos_shared"])
 Return("lib")
