@@ -1,6 +1,27 @@
 /**
- * This table switch used to transfer to the appropriate
- * routing for processing a system call.
+ * Syscall Table
+ * =============
+ * The sysent table is used to transfer to the appropriate
+ * routing for processing a system call. It's index corresponds
+ * to the label sent with the IPC message from the client. So a
+ * simple lookup in the table will give us the syscall handler
+ * function (as it is done in the syscall loop).
+ *
+ * A syscall handler function has well defined arguments
+ * 1. Thread ID of the sender
+ * 2. The sent IPC Message
+ * 3. A pointer to shared IPC memory between the root server and client
+ *
+ * As we can see, we have two ways to share content between the user and
+ * the root server. First we can append up to 64 words to the IPC message.
+ * And secondly we have the memory region starting in user space at
+ * address 0x60000000 were we can insert a maximum 4096 bytes (pagesize)
+ * of data. The root server in return will use the pager to look up the
+ * physical address of this area and write it's response directly into
+ * physical memory.
+ * The convention we used was to store 4 byte words in IPC messages
+ * and use the shared memory if we had strings or buffers to share.
+ *
  */
 
 #include <assert.h>
