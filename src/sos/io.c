@@ -318,9 +318,9 @@ void io_init() {
  * @param name filename requested for opening
  *
  */
-int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
+int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
-	if(name == NULL || L4_UntypedWords(msg_p->tag) != 1)
+	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
 	fmode_t mode = L4_MsgWord(msg_p, 0);
@@ -331,6 +331,8 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr name) {
 
 	// make sure our name is really \0 terminated
 	// so no client can trick us into reading garbage by calling string functions on this
+	char name[MAX_PATH_LENGTH+2];
+	memcpy(name, buf, MAX_PATH_LENGTH+1);
 	name[MAX_PATH_LENGTH+1] = '\0';
 
 	if( (fd = find_special_file(name)) != -1 ) {
