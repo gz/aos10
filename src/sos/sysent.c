@@ -49,6 +49,7 @@ void init_systable() {
 	register_syscall(SOS_READ, &read_file);
 	register_syscall(SOS_WRITE, &write_file);
 	register_syscall(SOS_CLOSE, &close_file);
+	register_syscall(SOS_STAT, &stat_file);
 	register_syscall(SOS_GETDIRENT, &get_dirent);
 
 	register_syscall(SOS_UNMAP_ALL, &pager_unmap_all);

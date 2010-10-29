@@ -120,9 +120,20 @@ int getdirent(int pos, char *name, size_t nbyte) {
 
 
 int stat(const char *path, stat_t *buf) {
+	if(path == NULL || buf == NULL)
+		return -1;
+	assert(strlen(path) <= MAX_PATH_LENGTH);
+
+  	data_ptr write_buffer = ipc_memory_start;
+	memcpy(write_buffer, path, strlen(path));
+
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_STAT, &msg, 0);
 	assert(L4_UntypedWords(tag) == 1);
 
+	assert(sizeof(stat_t) < IPC_MEMORY_SIZE);
+	memcpy(buf, write_buffer, sizeof(stat_t));
+
 	return L4_MsgWord(&msg, 0);
 }
+

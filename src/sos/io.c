@@ -31,6 +31,7 @@
 #include <l4/schedule.h>
 
 #include "io.h"
+#include "pager.h"
 #include "libsos.h"
 #include "network.h"
 
@@ -466,6 +467,42 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 	}
 }
+
+
+
+static void  stat_file_handler(uintptr_t token, int status, struct cookie * fh, fattr_t *attr) {
+	dprintf(0, "yay, got called with token:0x%X status:%d\n", token, status);
+	L4_ThreadId_t recipient = (L4_ThreadId_t) token;
+
+	if(status == NFS_OK) {
+		stat_t* fst = pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
+		fst->st_size = attr->size;
+		fst->st_atime = 0; //attr->atime;
+		fst->st_ctime = 0; //attr->ctime;
+		fst->st_type = ST_FILE;
+		fst->st_fmode = 0; // TODO
+		send_ipc_reply(recipient, SOS_STAT, 1, 0);
+	}
+	else {
+		send_ipc_reply(recipient, SOS_STAT, 1, -1);
+	}
+}
+
+
+int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+
+	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 0)
+		return IPC_SET_ERROR(-1);
+
+	char path[MAX_PATH_LENGTH+1];
+	memcpy(path, buf, MAX_PATH_LENGTH+1);
+	path[MAX_PATH_LENGTH] = '\0';
+
+	nfs_lookup(&mnt_point, path, &stat_file_handler, tid.raw);
+
+	return 0; // handler returns to client
+}
+
 
 /**
  * NFS handler for getting the info about a directory entry.

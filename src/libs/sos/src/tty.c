@@ -8,6 +8,7 @@
 
 #include <l4/types.h>
 
+
 size_t sos_write(const void *vData, long int position, size_t count, void *handle) {
 	return write(stdout_fd, vData, count);
 }

@@ -408,3 +408,37 @@ int set_ipc_reply(L4_Msg_t* msg_p, int args, ...) {
 
     return 1;
 }
+
+
+L4_MsgTag_t send_ipc_reply(L4_ThreadId_t recipient, int label, int args, ...) {
+	assert(args < IPC_MAX_WORDS);
+
+	L4_MsgTag_t tag;
+	L4_Msg_t msg;
+
+	L4_Set_MsgTag(tag);
+    L4_MsgClear(&msg);
+
+    // Appending Data Words
+	va_list ap;
+	va_start(ap, args);
+    for(int i = 0; i < args; i++) {
+    	L4_MsgAppendWord(&msg, va_arg(ap, L4_Word_t));
+    }
+    va_end(ap);
+
+    // Set Label and prepare message
+    L4_Set_MsgLabel(&msg, CREATE_SYSCALL_NR(label));
+    L4_MsgLoad(&msg);
+
+    // Sending Message
+	tag = L4_Reply(recipient);
+
+	if(L4_IpcFailed(tag)) {
+		L4_Word_t ec = L4_ErrorCode();
+		dprintf(0, "IPC call back has failed. User thread not blocking?\n");
+		sos_print_error(ec);
+	}
+
+	return tag;
+}

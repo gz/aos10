@@ -159,4 +159,9 @@ extern void sos_usleep(uint32_t microseconds);
  */
 int set_ipc_reply(L4_Msg_t* msg_p, int, ...);
 
+/**
+ *
+ */
+L4_MsgTag_t send_ipc_reply(L4_ThreadId_t, int, int, ...);
+
 #endif // _LIBSOS_H

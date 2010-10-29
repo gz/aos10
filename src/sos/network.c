@@ -81,7 +81,7 @@ network_init(void)
     // Finish the initialisation of the nslu2 hardware
     ixOsalOSServicesFinaliseInit();
 
-//#if 1
+
     /* Initialise NFS */
     int r = nfs_init(gw); assert(!r);
 
@@ -93,6 +93,6 @@ network_init(void)
     else
 	msg = "Successfully mounted '%s'\n";
     printf(msg, __FUNCTION__, NFS_DIR);
-//#endif
+
     printf("Finished %s\n\n", __FUNCTION__);
 }

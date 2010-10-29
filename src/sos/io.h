@@ -42,6 +42,7 @@ int open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int read_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int write_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int close_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int stat_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
 #endif /* IO_H_ */
