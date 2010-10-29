@@ -331,9 +331,9 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	// make sure our name is really \0 terminated
 	// so no client can trick us into reading garbage by calling string functions on this
-	char name[MAX_PATH_LENGTH+2];
+	char name[MAX_PATH_LENGTH+1];
 	memcpy(name, buf, MAX_PATH_LENGTH+1);
-	name[MAX_PATH_LENGTH+1] = '\0';
+	name[MAX_PATH_LENGTH] = '\0';
 
 	if( (fd = find_special_file(name)) != -1 ) {
 		file_table_entry* f = file_table[fd];

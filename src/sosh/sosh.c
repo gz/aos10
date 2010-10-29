@@ -20,8 +20,7 @@
 static fildes_t in;
 static stat_t   sbuf;
 
-static void 
-prstat(const char *name)
+static void prstat(const char *name)
 {
     /* print out stat buf */
 
@@ -33,8 +32,7 @@ prstat(const char *name)
 	   sbuf.st_size, sbuf.st_ctime, sbuf.st_atime, name);
 }
 
-static int
-cat(int argc, char **argv)
+static int cat(int argc, char **argv)
 {
     fildes_t fd;
     char buf[BUF_SIZ];
@@ -64,8 +62,7 @@ cat(int argc, char **argv)
 }
 
 
-static int
-cp(int argc, char **argv)
+static int cp(int argc, char **argv)
 {
     fildes_t fd, fd_out;
     char *file1, *file2;
@@ -99,8 +96,7 @@ cp(int argc, char **argv)
 
 #define MAX_PROCESSES 10
 
-static int 
-ps(int argc, char **argv)
+static int ps(int argc, char **argv)
 {
 
     process_t *process;
