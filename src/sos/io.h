@@ -26,6 +26,11 @@ typedef struct fentry {
 	void (*read)(struct fentry*);					/**< read function called for this file */
 } file_table_entry;
 
+/** Information we track for files found in the NFS file system. */
+typedef struct nfs_fentry {
+	char filename[MAX_PATH_LENGTH]; /**< Buffer for the name of the file */
+} nfs_file_table_entry;
+
 
 #define SPECIAL_FILES 1
 #define FILE_TABLE_ENTRIES SPECIAL_FILES
@@ -37,5 +42,6 @@ int open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int read_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int write_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int close_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
 #endif /* IO_H_ */

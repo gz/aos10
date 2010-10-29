@@ -32,6 +32,7 @@
 
 #include "io.h"
 #include "libsos.h"
+#include "network.h"
 
 #define verbose 1
 
@@ -41,6 +42,9 @@
 #define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
 
+// Cache for directory entries
+#define DIR_CACHE_SIZE 0x100
+static struct nfs_fentry dir_cache[DIR_CACHE_SIZE];
 
 /** Test to see whether a given file is a special file or not */
 inline static L4_Bool_t is_special_file(file_table_entry* f) {
@@ -461,4 +465,48 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		// TODO: close on file system
 		return IPC_SET_ERROR(-1);
 	}
+}
+
+/**
+ * NFS handler for getting the info about a directory entry.
+ *
+ * @param tid Caller thread ID
+ * @param msg_p IPC Message
+ * @param buf buffer where content is copied into
+ */
+static void get_dirent_cb(uintptr_t token, int status, int num_entries, struct nfs_filename *filenames, int next_cookie) {
+	dprintf(0,"get_dirent_cb called!\n");
+	dprintf(0,"number of file entries returned: %d\n", num_entries);
+
+	// copy file entries to local cache
+	size_t entries = min(num_entries,DIR_CACHE_SIZE);
+	for (int i = 0; i < entries; i++) {
+		size_t to_copy = min(filenames[i].size,MAX_PATH_LENGTH-1);
+		memcpy(dir_cache[i].filename,filenames[i].file,to_copy);
+		dir_cache[i].filename[to_copy] = '\0';
+	}
+
+	//L4_ThreadId_t recipient = (L4_ThreadId_t)token;
+	//char* buf = (char*)pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
+
+}
+
+/**
+ * Systam Call handler for getting the info about a directory entry.
+ *
+ * @param tid Caller thread ID
+ * @param msg_p IPC Message
+ * @param buf buffer where content is copied into
+ */
+int get_dirent(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 1)
+		return IPC_SET_ERROR(-1);
+
+	// which file position do we want to read
+	//int pos = L4_MsgWord(msg_p, 0);
+
+	// call nfs_readdir
+	nfs_readdir(&mnt_point,0,MAX_PATH_LENGTH,&get_dirent_cb,(uintptr_t)tid.raw);
+
+	return 0;
 }

@@ -30,7 +30,7 @@ struct cookie mnt_point = {{0}};
  *
  * Watch out for possible swap file collisions with your partner! :)
  */
-#define NFS_DIR "/mnt/hgfs/tftpboot"
+#define NFS_DIR "/tftpboot"
 
 // Internal APIs, just direct publish from ixp_osal
 extern uint32_t ixOsalOemInit(void);
@@ -81,7 +81,7 @@ network_init(void)
     // Finish the initialisation of the nslu2 hardware
     ixOsalOSServicesFinaliseInit();
 
-#if 0
+//#if 1
     /* Initialise NFS */
     int r = nfs_init(gw); assert(!r);
 
@@ -93,6 +93,6 @@ network_init(void)
     else
 	msg = "Successfully mounted '%s'\n";
     printf(msg, __FUNCTION__, NFS_DIR);
-#endif
+//#endif
     printf("Finished %s\n\n", __FUNCTION__);
 }

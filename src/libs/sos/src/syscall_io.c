@@ -112,7 +112,7 @@ int write(fildes_t file, const char* buf, size_t nbyte) {
 
 int getdirent(int pos, char *name, size_t nbyte) {
     L4_Msg_t msg;
-	L4_MsgTag_t tag = system_call(SOS_GETDIRENT, &msg, 1, nbyte);
+	L4_MsgTag_t tag = system_call(SOS_GETDIRENT, &msg, 1, pos);
 	assert(L4_UntypedWords(tag) == 1);
 
 	return L4_MsgWord(&msg, 0);
