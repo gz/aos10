@@ -37,7 +37,7 @@
 #include "libsos.h"
 #include "network.h"
 
-#define verbose 1
+#define verbose 2
 
 // Buffer for console read
 #define READ_BUFFER_SIZE 0x1000
@@ -111,6 +111,7 @@ void io_init() {
 	console_circular_buffer.buffer = (char*) &read_buffer;
 	console_circular_buffer.write_position = 0;
 	console_circular_buffer.overflow = FALSE;
+	console_circular_buffer.size = READ_BUFFER_SIZE;
 
 	// initializing console special file
 	file_cache[0] = malloc(sizeof(file_info)); // This is never free'd but its okay
@@ -128,10 +129,10 @@ void io_init() {
 	file_table_entry** file_table = get_process(L4_nilthread)->filetable; // TODO make correct
 	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close()
 	file_table[0]->file = file_cache[0];
+	file_table[0]->mode = FM_WRITE;
 	file_table[0]->owner = L4_nilthread;
 	file_table[0]->to_read = 0;
-	file_table[0]->destination = NULL;
-
+	file_table[0]->client_buffer = NULL;
 }
 
 
@@ -201,7 +202,7 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	file_table_entry* f = get_process(tid)->filetable[fd];
 
 	f->to_read = to_read;
-	f->destination = buf;
+	f->client_buffer = buf;
 
 	f->file->read(f);
 
@@ -231,7 +232,9 @@ int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	// do lookup and call write function
 	file_table_entry* f = get_process(tid)->filetable[fd];
-	int written = f->file->write(f, to_write, buf);
+	f->to_write = to_write;
+	f->client_buffer = buf;
+	int written = f->file->write(f);
 
 	return set_ipc_reply(msg_p, 1, written);
 }

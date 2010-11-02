@@ -206,7 +206,11 @@ int main(void) {
 	char *bp, *p;
 
 	in = open("console", FM_READ);
+	int in2 = open("console", FM_READ);
 	assert (in >= 0);
+	assert(in!=in2);
+	close(in);
+	close(in2);
 
 	bp = buf;
 	done = 0;

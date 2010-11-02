@@ -8,7 +8,7 @@
 #include "io.h"
 #include "datastructures/circular_buffer.h"
 
-#define verbose 0
+#define verbose 2
 
 
 /**
@@ -110,10 +110,12 @@ int open_serial(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 
 		// if we come here we can create it's okay to create a file descriptor
 		file_table[fd] = malloc(sizeof(file_table_entry)); // freed on close()
+		assert(file_table[fd] != NULL);
 		file_table[fd]->file = fi;
 		file_table[fd]->owner = tid;
 		file_table[fd]->to_read = 0;
-		file_table[fd]->destination = NULL;
+		file_table[fd]->to_write = 0;
+		file_table[fd]->client_buffer = NULL;
 		file_table[fd]->mode = mode;
 
 	}
@@ -136,10 +138,10 @@ int open_serial(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
  */
 void read_serial(file_table_entry* f) {
 
-	L4_Word_t to_send = circular_buffer_read(f->file->cbuffer, f->to_read, f->destination);
+	L4_Word_t to_send = circular_buffer_read(f->file->cbuffer, f->to_read, f->client_buffer);
 
 	if(to_send > 0) {
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 0);
+		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, to_send);
 		f->to_read = 0;
 	}
 }
@@ -153,23 +155,24 @@ void read_serial(file_table_entry* f) {
  * @param buffer send content
  * @return total bytes sent
  */
-int write_serial(file_table_entry* f, int to_send, char* buffer) {
+int write_serial(file_table_entry* f) {
 	// serial struct must be initialized
 	assert(f->file->serial_handle != NULL);
 
 	int total_sent = 0;
+	char* buffer = f->client_buffer;
 
 	// sending to serial
 	// In case we send faster than our serial driver allows we
 	// retry until all data is sent or at most 20 times.
 	for (int i=0; i < 20; i++) {
 
-		int sent = serial_send(f->file->serial_handle, buffer, to_send-total_sent);
+		int sent = serial_send(f->file->serial_handle, buffer, f->to_write-total_sent);
 		buffer += sent;
 
 		total_sent += sent;
 
-		if(total_sent == to_send)
+		if(total_sent == f->to_write)
 			break; // everything sent, can exit loop
 		else
 			dprintf(0, "sos_serial_send: serial driver's internal buffer fills faster than it can actually output data");
@@ -181,25 +184,29 @@ int write_serial(file_table_entry* f, int to_send, char* buffer) {
 void close_serial(file_table_entry* f) {
 
 	if(f->mode & FM_READ) {
+
 		// are we the last reader for this process reading on that serial interface?
 		file_table_entry** file_table = get_process(f->owner)->filetable;
 		L4_Bool_t last_reader = TRUE;
 
 		for(int i=0; i < PROCESS_MAX_FILES; i++) {
-			L4_Bool_t not_null = file_table[i] != NULL;
-			L4_Bool_t not_self = (f != file_table[i]);
-			L4_Bool_t is_reader = f->mode & FM_READ;
-			L4_Bool_t same_serial = f->file->serial_handle == file_table[i]->file->serial_handle;
+			if(file_table[i] == NULL)
+				continue;
 
-			if(not_null && not_self && is_reader && same_serial) {
+			L4_Bool_t not_self = (f != file_table[i]);
+			L4_Bool_t is_reader = file_table[i]->mode & FM_READ;
+			L4_Bool_t same_serial = f->file->serial_handle == file_table[i]->file->serial_handle;
+			if(not_self && is_reader && same_serial) {
 				last_reader = FALSE;
 				break;
 			}
+
 		}
 
 		if(last_reader) {
 			f->file->reader = L4_nilthread;
 		}
+		// else keep process as reader
 	}
 
 }

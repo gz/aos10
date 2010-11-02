@@ -19,7 +19,7 @@ typedef struct finfo {
 	circular_buffer* cbuffer;
 
 	int (*open)(struct finfo*, L4_ThreadId_t, L4_Msg_t*);
-	int (*write)(struct fentry*, int, data_ptr);	/**< write function called for this file */
+	int (*write)(struct fentry*);					/**< write function called for this file */
 	void (*read)(struct fentry*);					/**< read function called for this file */
 	void (*close)(struct fentry*);
 } file_info;
@@ -31,8 +31,10 @@ typedef struct fentry {
 	L4_ThreadId_t owner;
 	fmode_t mode;
 
-	data_ptr destination;		/**< pointer to user space memory location where we should write the data on read */
+	data_ptr client_buffer;		/**< pointer to user space memory location where we should write the data on read */
 	L4_Word_t to_read;			/**< number of bytes to read (set by syscall read()) */
+	L4_Word_t to_write;			/**< number of bytes to write (set by syscall write()) */
+
 } file_table_entry;
 
 #define DIR_CACHE_SIZE 0x100
