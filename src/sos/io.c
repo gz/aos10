@@ -31,250 +31,73 @@
 #include <l4/schedule.h>
 
 #include "io.h"
+#include "io_serial.h"
 #include "pager.h"
+#include "process.h"
 #include "libsos.h"
 #include "network.h"
 
 #define verbose 1
 
-#define IPC_SET_ERROR(err) set_ipc_reply(msg_p, 1, (err));
-
 // Buffer for console read
 #define READ_BUFFER_SIZE 0x1000
 static char read_buffer[READ_BUFFER_SIZE];
+static circular_buffer console_circular_buffer;
 
 // Cache for directory entries
-#define DIR_CACHE_SIZE 0x100
-static struct nfs_fentry dir_cache[DIR_CACHE_SIZE];
-
-/** Test to see whether a given file is a special file or not */
-inline static L4_Bool_t is_special_file(file_table_entry* f) {
-	return f != NULL && f->serial_handle != NULL;
-}
-
-
-/** Test to see whether a given file descriptor represents a special file or not */
-inline static L4_Bool_t is_special_filedescriptor(fildes_t fd) {
-	return fd >= 0 && fd < SPECIAL_FILES;
-}
-
+file_info* file_cache[DIR_CACHE_SIZE];
 
 /** Checks if a file descriptor is within the file table range and the entry is currently not NULL */
-inline static L4_Bool_t is_valid_filedescriptor(fildes_t fd) {
-	return 0 <= fd && fd < FILE_TABLE_ENTRIES && file_table[fd] != NULL;
+inline static L4_Bool_t is_valid_filedescriptor(L4_ThreadId_t tid, fildes_t fd) {
+	file_table_entry** file_table = get_process(tid)->filetable;
+	return 0 <= fd && fd < PROCESS_MAX_FILES && file_table[fd] != NULL;
 }
 
 
 /** Checks if a given thread can write to a file represented by file descriptor fd */
 inline static L4_Bool_t can_write(L4_ThreadId_t tid, fildes_t fd) {
-	L4_Bool_t valid = is_valid_filedescriptor(fd);
-	L4_Bool_t can_write = is_special_filedescriptor(fd) || L4_IsThreadEqual(file_table[fd]->owner, tid);
-	return valid && can_write;
+	file_table_entry** file_table = get_process(tid)->filetable;
+	return is_valid_filedescriptor(tid, fd) && (file_table[fd]->mode & FM_WRITE);
 }
 
 
 /** Checks if a given thread can read to a file represented by file descriptor fd */
 inline static L4_Bool_t can_read(L4_ThreadId_t tid, fildes_t fd) {
-	return is_valid_filedescriptor(fd) && L4_IsThreadEqual(file_table[fd]->owner, tid);
+	file_table_entry** file_table = get_process(tid)->filetable;
+	return is_valid_filedescriptor(tid, fd) && (file_table[fd]->mode & FM_READ);
 }
 
 
 /** Checks if a given thread can close a file represented by file descriptor fd */
 inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
-	return is_valid_filedescriptor(fd) && L4_IsThreadEqual(file_table[fd]->owner, tid);
+	return is_valid_filedescriptor(tid, fd);
 }
 
 
 /**
- * Searches for a given file in the special file table.
+ * Searches for a given file in the file cache.
  *
  * @param name of file to search for
- * @return index in special_table or -1 if not found
+ * @return index in file_cache or -1 if not found
  */
-static fildes_t find_special_file(data_ptr name) {
+static int find_file(data_ptr name) {
 
-	for(int i=0; i<SPECIAL_FILES; i++) {
-		if(strcmp(file_table[i]->identifier, name) == 0)
+	for(int i=0; i<DIR_CACHE_SIZE; i++) {
+		if(strcmp(file_cache[i]->filename, name) == 0)
 			return i;
 	}
 
 	return -1;
 }
 
+fildes_t find_free_file_slot(file_table_entry** file_table) {
 
-/**
- * Finds a file handle entry with serial_handle pointing to the same
- * memory location as `ser`.
- *
- * @param ser struct to search for
- * @return Pointer to the corresponding file table entry or NULL if not found.
- */
-static inline file_table_entry* get_file_handle_for_serial(struct serial* ser) {
-	file_table_entry* f = NULL;
-
-	for(int i=0; i<SPECIAL_FILES; i++) {
-		if(file_table[i]->serial_handle == ser)
-			f = file_table[i];
+	for(int i=0; i<PROCESS_MAX_FILES; i++) {
+		if(file_table[i] == NULL)
+			return i;
 	}
 
-	return f;
-}
-
-
-/**
- * Interrupt handler for incoming chars on serial console.
- * This function will find the special file corresponding
- * to the serial struct. Then fill its buffer with
- * the incoming char and call it's write function.
- * The write function is responsible for determine if it's
- * time to send an IPC back to the client.
- *
- * @param serial structure identifying the serial console
- * @param c received char
- */
-static void serial_receive_handler(struct serial* ser, char c) {
-
-	// get file_table_entry pointer
-	file_table_entry* f = get_file_handle_for_serial(ser);
-	assert(f != NULL);
-
-	if(f->double_overflow)
-		return; // if the buffer is full for the 2nd time, drop whatever follows
-
-	// add char to circular buffer
-	f->buffer[f->write_position] = c;
-	f->write_position = (f->write_position + 1) % READ_BUFFER_SIZE;
-
-	// end of the buffer (but one char) has been reached, add newline and send text
-	if ((f->write_position+2) % READ_BUFFER_SIZE == f->read_position) {
-
-		f->buffer[f->write_position] = '\n';
-		f->write_position = (f->write_position + 1) % READ_BUFFER_SIZE;
-
-		if (!f->reader_blocking) {
-			f->double_overflow = TRUE; // buffer is full for the 2nd time, drop whatever follows
-			dprintf(0, "\nDouble console read buffer overflow. We're starting to loose things here :-(.\n");
-			return;
-		}
-
-		f->read(f);
-	}
-	else if (c == '\n')
-		f->read(f);
-}
-
-
-/**
- * Initializes serial struct and registers handler function
- * function to receive input data.
- */
-static struct serial* console_init(void) {
-
-	struct serial* ser = serial_init();
-	assert(ser != NULL);
-
-	serial_register_handler(ser, &serial_receive_handler);
-
-	return ser;
-}
-
-
-/**
- * Read function for special devices reading from a serial device.
- * This function is usually called in `read_file` or by a serial
- * interrupt. It only sends an IPC message back to the client
- * if we have something in the buffer. This realizes the blocking read
- * call on the client side.
- *
- * Note: Special Files using this function need at least a buffer of size
- * `READ_BUFFER_SIZE`.
- *
- * @param f callee
- */
-static void read_serial(file_table_entry* f) {
-
-	// check f->to_read against buffer fill and determine how many chars should be sent
-	L4_Word_t max_send = min(f->to_read, READ_BUFFER_SIZE-1);
-	L4_Word_t to_send = min((READ_BUFFER_SIZE + f->write_position - f->read_position) % READ_BUFFER_SIZE, max_send);
-
-	if(to_send > 0 && f->reader_blocking) {
-
-		dprintf(3, "copy_console_buffer: f->reader_blocking: %d\n", f->reader_blocking);
-
-		// copy the contents of the circular buffer to the shared memory location
-		if (f->read_position < f->write_position)
-			memcpy(f->destination, &f->buffer[f->read_position], f->write_position - f->read_position);
-		else {
-			memcpy(f->destination, &f->buffer[f->read_position], READ_BUFFER_SIZE-f->read_position);
-			memcpy(&f->destination[READ_BUFFER_SIZE - f->read_position], f->buffer, f->write_position);
-		}
-
-		// ensure that there is a newline at the end
-		assert(f->destination[to_send-1] == '\n');
-
-		L4_MsgTag_t tag;
-		L4_Msg_t msg;
-
-		L4_Set_MsgTag(tag);
-	    L4_MsgClear(&msg);
-	    L4_MsgAppendWord(&msg, to_send);
-
-	    // Set Label and prepare message
-	    L4_Set_MsgLabel(&msg, CREATE_SYSCALL_NR(SOS_READ));
-	    L4_MsgLoad(&msg);
-
-	    // Sending Message
-		tag = L4_Reply(f->owner);
-
-	    f->reader_blocking = FALSE;
-	    f->double_overflow = FALSE;
-
-
-		if(L4_IpcFailed(tag)) {
-			L4_Word_t ec = L4_ErrorCode();
-			dprintf(0, "%s: Console read IPC callback has failed. User thread not blocking?\n", __FUNCTION__);
-			sos_print_error(ec);
-			f->reader_blocking = TRUE;
-		}
-		else {
-			// increment read pointer
-			f->read_position = (f->read_position + to_send) % READ_BUFFER_SIZE;
-		}
-	}
-}
-
-
-/**
- * This is a write function for special files writing to a serial device.
- *
- * @param f special file entry (callee)
- * @param to_send amount of bytes to send
- * @param buffer send content
- * @return total bytes sent
- */
-static int write_serial(file_table_entry* f, int to_send, char* buffer) {
-	// serial struct must be initialized
-	assert(f->serial_handle != NULL);
-
-	int total_sent = 0;
-
-	// sending to serial
-	// In case we send faster than our serial driver allows we
-	// retry until all data is sent or at most 20 times.
-	for (int i=0; i < 20; i++) {
-
-		int sent = serial_send(f->serial_handle, buffer, to_send-total_sent);
-		buffer += sent;
-
-		total_sent += sent;
-
-		if(total_sent == to_send)
-			break; // everything sent, can exit loop
-		else
-			dprintf(0, "sos_serial_send: serial driver's internal buffer fills faster than it can actually output data");
-	}
-
-	return total_sent;
+	return -1;
 }
 
 
@@ -284,22 +107,30 @@ static int write_serial(file_table_entry* f, int to_send, char* buffer) {
  * console.
  */
 void io_init() {
-
-	file_table[0] = malloc(sizeof(file_table_entry)); // This is never free'd but its okay
+	console_circular_buffer.read_position = 0;
+	console_circular_buffer.buffer = (char*) &read_buffer;
+	console_circular_buffer.write_position = 0;
+	console_circular_buffer.overflow = FALSE;
 
 	// initializing console special file
-	strcpy(file_table[0]->identifier, "console");
+	file_cache[0] = malloc(sizeof(file_info)); // This is never free'd but its okay
+	strcpy(file_cache[0]->filename, "console");
+	file_cache[0]->size = 0;
+	file_cache[0]->reader = L4_nilthread;
+	file_cache[0]->open = &open_serial;
+	file_cache[0]->read = &read_serial;
+	file_cache[0]->write = &write_serial;
+	file_cache[0]->close = &close_serial;
+	file_cache[0]->serial_handle = console_init();
+	file_cache[0]->cbuffer = &console_circular_buffer;
+
+	// initialize standard out file descriptor
+	file_table_entry** file_table = get_process(L4_nilthread)->filetable; // TODO make correct
+	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close()
+	file_table[0]->file = file_cache[0];
 	file_table[0]->owner = L4_nilthread;
-	file_table[0]->reader_blocking = FALSE;
-	file_table[0]->double_overflow = FALSE;
 	file_table[0]->to_read = 0;
-	file_table[0]->buffer = (data_ptr) &read_buffer;
-	file_table[0]->write_position = 0;
-	file_table[0]->read_position = 0;
 	file_table[0]->destination = NULL;
-	file_table[0]->serial_handle = console_init();
-	file_table[0]->read = &read_serial;
-	file_table[0]->write = &write_serial;
 
 }
 
@@ -329,8 +160,6 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	fmode_t mode = L4_MsgWord(msg_p, 0);
-	fildes_t fd = -1;
-
 	if(mode != O_RDONLY && mode != O_RDWR && mode != O_WRONLY)
 		return IPC_SET_ERROR(-1);
 
@@ -340,31 +169,15 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	memcpy(name, buf, MAX_PATH_LENGTH+1);
 	name[MAX_PATH_LENGTH] = '\0';
 
-	if( (fd = find_special_file(name)) != -1 ) {
-		file_table_entry* f = file_table[fd];
+	int index = -1;
+	if( (index = find_file(name)) == -1 ) {
+		// TODO: file does not exist, create file
+		// index = create_file(name);
+	}
+	assert((index = find_file(name)) != -1); // file must exist now
 
-		// user tries to open a special file
-		// special files allow multiple writer single reader
-		if(mode == O_RDONLY || mode == O_RDWR) {
-
-			// one process is allowed to open the special device for reading multiple times
-			if(f->owner.raw == 0 || f->owner.raw == tid.raw)
-				f->owner = tid;
-			else {
-				// switch to the owner of the special file to reduce busy waiting for
-				// the callee
-				L4_ThreadSwitch(f->owner);
-				return IPC_SET_ERROR(-1); // only one process allowed for writing
-			}
-
-		}
-		return set_ipc_reply(msg_p, 1, fd); // writing always allowed, return file descriptor
-
-	} // else TODO: handle file system access
-
-
-	// reply with either file descriptor or fd equals -1
-	return set_ipc_reply(msg_p, 1, fd);
+	file_info* fi = file_cache[index];
+	return fi->open(fi, tid, msg_p);
 }
 
 
@@ -385,22 +198,14 @@ int read_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(!can_read(tid, fd))
 		return IPC_SET_ERROR(-1);
 
-	file_table_entry* f = file_table[fd];
+	file_table_entry* f = get_process(tid)->filetable[fd];
 
-	if(is_special_file(f)) {
+	f->to_read = to_read;
+	f->destination = buf;
 
-		f->reader_blocking = TRUE;
-		f->to_read = to_read;
-		f->destination = buf;
+	f->file->read(f);
 
-		f->read(f);
-		return 0; // ipc return is handled by
-				  // the serial interrupt (or f->read(f))
-	}
-	else {
-		// TODO: file system read
-		return IPC_SET_ERROR(-1);
-	}
+	return 0; // ipc return is done by dynamic read handler
 }
 
 
@@ -425,8 +230,8 @@ int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	// do lookup and call write function
-	file_table_entry* f = file_table[fd];
-	int written = f->write(f, to_write, buf);
+	file_table_entry* f = get_process(tid)->filetable[fd];
+	int written = f->file->write(f, to_write, buf);
 
 	return set_ipc_reply(msg_p, 1, written);
 }
@@ -450,35 +255,31 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(!can_close(tid, fd))
 		return IPC_SET_ERROR(-1);
 
-	if(is_special_filedescriptor(fd)) {
+	file_table_entry* f = get_process(tid)->filetable[fd];
 
-		if(L4_IsThreadEqual(file_table[fd]->owner, tid)) {
-			file_table[fd]->owner = L4_nilthread;
-			file_table[fd]->reader_blocking = FALSE;
-		}
-
-		// closing special file is always a success
-		// since we can have multiple writers which we don't track
-		return set_ipc_reply(msg_p, 1, 0);
-
+	// for certain files we need to call a special close handler
+	if(f->file->close != NULL) {
+		f->file->close(f);
 	}
-	else {
-		// TODO: close on file system
-		return IPC_SET_ERROR(-1);
-	}
+
+	// free allocated structures
+	free(f);
+	get_process(tid)->filetable[fd] = NULL;
+
+	return set_ipc_reply(msg_p, 1, 0);
 }
 
 
 
 static void  stat_file_handler(uintptr_t token, int status, struct cookie * fh, fattr_t *attr) {
-	dprintf(0, "yay, got called with token:0x%X status:%d\n", token, status);
+	dprintf(0, "stat_file_handler: got called with token:0x%X status:%d\n", token, status);
 	L4_ThreadId_t recipient = (L4_ThreadId_t) token;
 
 	if(status == NFS_OK) {
 		stat_t* fst = pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
 		fst->st_size = attr->size;
-		fst->st_atime = 0; //attr->atime;
-		fst->st_ctime = 0; //attr->ctime;
+		fst->st_atime = attr->atime.useconds / 10;
+		fst->st_ctime = attr->ctime.useconds;
 		fst->st_type = ST_FILE;
 		fst->st_fmode = 0; // TODO
 		send_ipc_reply(recipient, SOS_STAT, 1, 0);
@@ -514,7 +315,7 @@ int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 static void get_dirent_cb(uintptr_t token, int status, int num_entries, struct nfs_filename *filenames, int next_cookie) {
 	dprintf(0,"get_dirent_cb called!\n");
 	dprintf(0,"number of file entries returned: %d\n", num_entries);
-
+/*
 	// copy file entries to local cache
 	size_t entries = min(num_entries,DIR_CACHE_SIZE);
 	for (int i = 0; i < entries; i++) {
@@ -522,7 +323,7 @@ static void get_dirent_cb(uintptr_t token, int status, int num_entries, struct n
 		memcpy(dir_cache[i].filename,filenames[i].file,to_copy);
 		dir_cache[i].filename[to_copy] = '\0';
 	}
-
+*/
 	//L4_ThreadId_t recipient = (L4_ThreadId_t)token;
 	//char* buf = (char*)pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
 

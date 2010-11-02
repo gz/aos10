@@ -158,6 +158,7 @@ extern void sos_usleep(uint32_t microseconds);
  * reply in the syscall loop.
  */
 int set_ipc_reply(L4_Msg_t* msg_p, int, ...);
+#define IPC_SET_ERROR(err) set_ipc_reply(msg_p, 1, (err));
 
 /**
  *

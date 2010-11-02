@@ -92,11 +92,6 @@ for(int i=0; i<4096; i++) {
 #define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
-/** List element used in the first level page table */
-typedef struct page_entry {
-	void* address;
-} page_t;
-
 static page_t* first_level_table = NULL;
 
 
