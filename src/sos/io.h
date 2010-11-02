@@ -5,6 +5,7 @@
 #include <l4/message.h>
 #include <l4/types.h>
 #include "datastructures/circular_buffer.h"
+#include <rpc.h>
 
 struct fentry;
 struct finfo;
@@ -18,10 +19,12 @@ typedef struct finfo {
 	struct serial* serial_handle;					/**< serial handler (only used for special files) */
 	circular_buffer* cbuffer;
 
+	struct cookie nfs_handle;
+
 	int  (*open)  (struct finfo*, L4_ThreadId_t, L4_Msg_t*);
-	int  (*write) (struct fentry*);					/**< write function called for this file */
-	void (*read)  (struct fentry*);					/**< read function called for this file */
-	void (*close) (struct fentry*);
+	void (*write) (struct fentry*);					/**< write function called for this file */
+	void (*read)  (struct fentry*);					/**< read function called for this file  */
+	void (*close) (struct fentry*);					/**< close function called for this file */
 } file_info;
 
 
@@ -34,6 +37,9 @@ typedef struct fentry {
 	data_ptr client_buffer;		/**< pointer to user space memory location where we should write the data on read */
 	L4_Word_t to_read;			/**< number of bytes to read (set by syscall read()) */
 	L4_Word_t to_write;			/**< number of bytes to write (set by syscall write()) */
+
+	L4_Word_t write_position;
+	L4_Word_t read_position;
 
 } file_table_entry;
 

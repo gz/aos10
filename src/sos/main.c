@@ -21,6 +21,7 @@
 
 #include "pager.h"
 #include "frames.h"
+#include "process.h"
 #include "io.h"
 #include "sysent.h"
 
@@ -56,6 +57,7 @@ static void init_thread(void)
 
 		// Start a new task with this program
 		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0xC0000000);
+		create_process(newtid);
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }

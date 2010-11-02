@@ -19,6 +19,7 @@ typedef struct {
 process current_process;
 
 process* get_process(L4_ThreadId_t tid);
+void create_process(L4_ThreadId_t tid);
 pid_t tid2pid(L4_ThreadId_t);
 
 #endif /* PROCESS_H_ */

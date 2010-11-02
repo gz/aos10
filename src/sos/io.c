@@ -38,7 +38,6 @@
 #include "libsos.h"
 #include "network.h"
 
-
 #define verbose 2
 
 // Buffer for console read
@@ -147,19 +146,6 @@ void io_init() {
 
 	// Set up dir cache with files from NFS directory
 	nfs_readdir(&mnt_point, 0, MAX_PATH_LENGTH, &nfs_readdir_callback, 0);
-
-
-
-	// initialize standard out file descriptor for our 1st process
-	// TODO move in process_create later
-	file_table_entry** file_table = get_process(L4_nilthread)->filetable;
-	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close()
-	assert(file_table[0] != NULL);
-	file_table[0]->file = file_cache[0];
-	file_table[0]->mode = FM_WRITE;
-	file_table[0]->owner = L4_nilthread;
-	file_table[0]->to_read = 0;
-	file_table[0]->client_buffer = NULL;
 }
 
 
@@ -257,9 +243,9 @@ int write_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	file_table_entry* f = get_process(tid)->filetable[fd];
 	f->to_write = to_write;
 	f->client_buffer = buf;
-	int written = f->file->write(f);
+	f->file->write(f);
 
-	return set_ipc_reply(msg_p, 1, written);
+	return 0; // ipc return is done by dynamic read handler
 }
 
 
@@ -294,10 +280,6 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	return set_ipc_reply(msg_p, 1, 0);
 }
-
-
-
-
 
 
 int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {

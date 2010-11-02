@@ -5,15 +5,16 @@
 #include "io.h"
 #include "libsos.h"
 #include "network.h"
-
+#include "process.h"
 
 #define verbose 1
-
 
 static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 
 	int index = (int) token;
 	stat_t* stat = &file_cache[index]->status;
+
+	file_cache[index]->nfs_handle = *fh; // copy the file handle
 
 	if(status == NFS_OK) {
 		stat->st_size = attr->size;
@@ -31,6 +32,90 @@ static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr
 	}
 
 }
+
+
+int open_nfs(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
+	assert(get_process(tid) != NULL);
+	file_table_entry** file_table = get_process(tid)->filetable;
+	fmode_t mode = L4_MsgWord(msg_p, 0);
+
+	int fd = -1;
+	if( (fd = find_free_file_slot(file_table)) != -1) {
+
+		if((mode & fi->status.st_fmode) == mode) {
+			// if we come here it's okay to create a file descriptor
+			file_table[fd] = malloc(sizeof(file_table_entry)); // freed on close()
+			assert(file_table[fd] != NULL);
+			file_table[fd]->file = fi;
+			file_table[fd]->owner = tid;
+			file_table[fd]->to_read = 0;
+			file_table[fd]->to_write = 0;
+			file_table[fd]->read_position = 0;
+			file_table[fd]->write_position = 0;
+			file_table[fd]->client_buffer = NULL;
+			file_table[fd]->mode = mode;
+
+			return set_ipc_reply(msg_p, 1, fd);
+		}
+		else {
+			dprintf(0, "thread:0x%X is trying to open file with mode:%d\nbut file access is restricted to %d\n", tid.raw, mode, fi->status.st_fmode);
+			return IPC_SET_ERROR(-1);
+		}
+
+	}
+
+	return IPC_SET_ERROR(-1);
+}
+
+
+static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_read, char *data) {
+
+	file_table_entry* f = (file_table_entry*) token;
+
+	if(status == NFS_OK) {
+		f->read_position += bytes_read;
+		memcpy(f->client_buffer, data, bytes_read);
+		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, bytes_read);
+	}
+	else {
+		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, -1);
+	}
+
+}
+
+
+void read_nfs(file_table_entry* f) {
+	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, &nfs_read_callback, (int)f);
+}
+
+
+static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
+
+	file_table_entry* f = (file_table_entry*) token;
+
+	if(status == NFS_OK) {
+		int new_size = attr->size;
+		int bytes_written = new_size - f->file->status.st_size;
+		f->write_position += bytes_written;
+
+		// update file attributes
+		f->file->status.st_size = new_size;
+		f->file->status.st_atime = attr->atime.useconds / 1000;
+
+		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_WRITE), 1, bytes_written);
+	}
+	else {
+		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_WRITE), 1, -1);
+	}
+
+}
+
+void write_nfs(file_table_entry* f) {
+	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, &nfs_write_callback, (int)f);
+}
+
 
 /**
  * NFS handler for getting the info about a directory entry.
@@ -59,9 +144,9 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 
 				fi->cbuffer = NULL;
 				fi->serial_handle = NULL;
-				//fi->open = &nfs_open;
-				//fi->read = &nfs_read;
-				//fi->write = &nfs_write;
+				fi->open = &open_nfs;
+				fi->read = &read_nfs;
+				fi->write = &write_nfs;
 				fi->close = NULL;
 				fi->reader = L4_anythread;
 

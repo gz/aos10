@@ -141,7 +141,7 @@ void read_serial(file_table_entry* f) {
 	L4_Word_t to_send = circular_buffer_read(f->file->cbuffer, f->to_read, f->client_buffer);
 
 	if(to_send > 0) {
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, to_send);
+		send_ipc_reply(f->owner, SOS_READ, 1, to_send);
 		f->to_read = 0;
 	}
 }
@@ -155,7 +155,7 @@ void read_serial(file_table_entry* f) {
  * @param buffer send content
  * @return total bytes sent
  */
-int write_serial(file_table_entry* f) {
+void write_serial(file_table_entry* f) {
 	// serial struct must be initialized
 	assert(f->file->serial_handle != NULL);
 
@@ -178,7 +178,7 @@ int write_serial(file_table_entry* f) {
 			dprintf(0, "sos_serial_send: serial driver's internal buffer fills faster than it can actually output data");
 	}
 
-	return total_sent;
+	send_ipc_reply(f->owner, SOS_WRITE, 1, total_sent);
 }
 
 void close_serial(file_table_entry* f) {
