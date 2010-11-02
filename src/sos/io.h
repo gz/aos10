@@ -12,16 +12,16 @@ struct finfo;
 /** Information we track for files in the file system (NFS and device files). */
 typedef struct finfo {
 	char filename[MAX_PATH_LENGTH]; /**< Buffer for the name of the file */
-	int size;
+	stat_t status;
 
 	L4_ThreadId_t reader;							/**< for special files: thread who has read access*/
 	struct serial* serial_handle;					/**< serial handler (only used for special files) */
 	circular_buffer* cbuffer;
 
-	int (*open)(struct finfo*, L4_ThreadId_t, L4_Msg_t*);
-	int (*write)(struct fentry*);					/**< write function called for this file */
-	void (*read)(struct fentry*);					/**< read function called for this file */
-	void (*close)(struct fentry*);
+	int  (*open)  (struct finfo*, L4_ThreadId_t, L4_Msg_t*);
+	int  (*write) (struct fentry*);					/**< write function called for this file */
+	void (*read)  (struct fentry*);					/**< read function called for this file */
+	void (*close) (struct fentry*);
 } file_info;
 
 
@@ -48,5 +48,6 @@ int close_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int stat_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 fildes_t find_free_file_slot(file_table_entry**);
+int file_cache_insert(file_info*);
 
 #endif /* IO_H_ */

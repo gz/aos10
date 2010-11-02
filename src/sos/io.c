@@ -32,10 +32,12 @@
 
 #include "io.h"
 #include "io_serial.h"
+#include "io_nfs.h"
 #include "pager.h"
 #include "process.h"
 #include "libsos.h"
 #include "network.h"
+
 
 #define verbose 2
 
@@ -45,7 +47,16 @@ static char read_buffer[READ_BUFFER_SIZE];
 static circular_buffer console_circular_buffer;
 
 // Cache for directory entries
+static int file_cache_next_entry = 0;
 file_info* file_cache[DIR_CACHE_SIZE];
+
+inline int file_cache_insert(file_info* fi) {
+	assert(file_cache_next_entry < DIR_CACHE_SIZE);
+	file_cache[file_cache_next_entry] = fi;
+
+	return file_cache_next_entry++;
+}
+
 
 /** Checks if a file descriptor is within the file table range and the entry is currently not NULL */
 inline static L4_Bool_t is_valid_filedescriptor(L4_ThreadId_t tid, fildes_t fd) {
@@ -107,27 +118,43 @@ fildes_t find_free_file_slot(file_table_entry** file_table) {
  * console.
  */
 void io_init() {
+
+	// initializing console special file
 	console_circular_buffer.read_position = 0;
 	console_circular_buffer.buffer = (char*) &read_buffer;
 	console_circular_buffer.write_position = 0;
 	console_circular_buffer.overflow = FALSE;
 	console_circular_buffer.size = READ_BUFFER_SIZE;
 
-	// initializing console special file
-	file_cache[0] = malloc(sizeof(file_info)); // This is never free'd but its okay
-	strcpy(file_cache[0]->filename, "console");
-	file_cache[0]->size = 0;
-	file_cache[0]->reader = L4_nilthread;
-	file_cache[0]->open = &open_serial;
-	file_cache[0]->read = &read_serial;
-	file_cache[0]->write = &write_serial;
-	file_cache[0]->close = &close_serial;
-	file_cache[0]->serial_handle = console_init();
-	file_cache[0]->cbuffer = &console_circular_buffer;
+	file_info* console_file = malloc(sizeof(file_info)); // This is never free'd but its okay
+	assert(console_file != NULL);
+	strcpy(console_file->filename, "console");
 
-	// initialize standard out file descriptor
-	file_table_entry** file_table = get_process(L4_nilthread)->filetable; // TODO make correct
+	console_file->status.st_atime = 0;
+	console_file->status.st_ctime = 0;
+	console_file->status.st_fmode = FM_READ | FM_WRITE;
+	console_file->status.st_size = 0;
+	console_file->status.st_type = ST_SPECIAL;
+	console_file->reader = L4_nilthread;
+	console_file->open = &open_serial;
+	console_file->read = &read_serial;
+	console_file->write = &write_serial;
+	console_file->close = &close_serial;
+	console_file->serial_handle = console_init();
+	console_file->cbuffer = &console_circular_buffer;
+
+	file_cache_insert(console_file);
+
+	// Set up dir cache with files from NFS directory
+	nfs_readdir(&mnt_point, 0, MAX_PATH_LENGTH, &nfs_readdir_callback, 0);
+
+
+
+	// initialize standard out file descriptor for our 1st process
+	// TODO move in process_create later
+	file_table_entry** file_table = get_process(L4_nilthread)->filetable;
 	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close()
+	assert(file_table[0] != NULL);
 	file_table[0]->file = file_cache[0];
 	file_table[0]->mode = FM_WRITE;
 	file_table[0]->owner = L4_nilthread;
@@ -139,16 +166,12 @@ void io_init() {
 /**
  * System Call handler for open() calls. This functions works in the following
  * way:
- *  1. Check if there is a special (i.e. console) device with the given name
- * 	2. Check if there is a file in the file system with the given name [TODO]
- *  3. Create the file on the file system if not found yet [TODO]
+ * 	1. Check if there is a file in the file system with the given name
+ *  2. Create the file on the file system if not found yet [TODO]
+ *  3. Dispatch to files handler for open calls
  *
  * A IPC message is sent back to the callee containing the file descriptor
  * or -1 on error.
- *
- * TODO: A failed attempt to open the console for reading (because it is already
- * open) will result in a context switch to reduce the cost of busy waiting
- * for the console.
  *
  * @param tid Caller Thread ID
  * @param msg_p IPC Message containing requested file access mode in Word 0
@@ -274,23 +297,7 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 
 
-static void  stat_file_handler(uintptr_t token, int status, struct cookie * fh, fattr_t *attr) {
-	dprintf(0, "stat_file_handler: got called with token:0x%X status:%d\n", token, status);
-	L4_ThreadId_t recipient = (L4_ThreadId_t) token;
 
-	if(status == NFS_OK) {
-		stat_t* fst = pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
-		fst->st_size = attr->size;
-		fst->st_atime = attr->atime.useconds / 10;
-		fst->st_ctime = attr->ctime.useconds;
-		fst->st_type = ST_FILE;
-		fst->st_fmode = 0; // TODO
-		send_ipc_reply(recipient, SOS_STAT, 1, 0);
-	}
-	else {
-		send_ipc_reply(recipient, SOS_STAT, 1, -1);
-	}
-}
 
 
 int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
@@ -302,52 +309,37 @@ int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	memcpy(path, buf, MAX_PATH_LENGTH+1);
 	path[MAX_PATH_LENGTH] = '\0';
 
-	nfs_lookup(&mnt_point, path, &stat_file_handler, tid.raw);
-
-	return 0; // handler returns to client
-}
-
-
-/**
- * NFS handler for getting the info about a directory entry.
- *
- * @param tid Caller thread ID
- * @param msg_p IPC Message
- * @param buf buffer where content is copied into
- */
-static void get_dirent_cb(uintptr_t token, int status, int num_entries, struct nfs_filename *filenames, int next_cookie) {
-	dprintf(0,"get_dirent_cb called!\n");
-	dprintf(0,"number of file entries returned: %d\n", num_entries);
-/*
-	// copy file entries to local cache
-	size_t entries = min(num_entries,DIR_CACHE_SIZE);
-	for (int i = 0; i < entries; i++) {
-		size_t to_copy = min(filenames[i].size,MAX_PATH_LENGTH-1);
-		memcpy(dir_cache[i].filename,filenames[i].file,to_copy);
-		dir_cache[i].filename[to_copy] = '\0';
+	int index = -1;
+	if((index = find_file(path)) != -1) {
+		memcpy(buf, &file_cache[index]->status, sizeof(stat_t));
+		return set_ipc_reply(msg_p, 1, 0);
 	}
-*/
-	//L4_ThreadId_t recipient = (L4_ThreadId_t)token;
-	//char* buf = (char*)pager_physical_lookup(recipient, (L4_Word_t)ipc_memory_start);
-
+	else {
+		// file does not exist
+		return IPC_SET_ERROR(-1);
+	}
 }
 
+
 /**
- * Systam Call handler for getting the info about a directory entry.
- *
- * @param tid Caller thread ID
- * @param msg_p IPC Message
- * @param buf buffer where content is copied into
+ * System Call handler for getting the info about a directory entry.
+ * This function does a lookup in the global IO file_cache
+ * and returns the filename to the client.
  */
 int get_dirent(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
 	// which file position do we want to read
-	//int pos = L4_MsgWord(msg_p, 0);
+	int pos = L4_MsgWord(msg_p, 0);
 
-	// call nfs_readdir
-	nfs_readdir(&mnt_point,0,MAX_PATH_LENGTH,&get_dirent_cb,(uintptr_t)tid.raw);
+	if(pos == file_cache_next_entry)
+		return IPC_SET_ERROR(0);
+	if(pos > file_cache_next_entry)
+		return IPC_SET_ERROR(-1);
 
-	return 0;
+	int to_copy = strlen(file_cache[pos]->filename);
+	strcpy(buf, file_cache[pos]->filename);
+	return set_ipc_reply(msg_p, 1, to_copy);
 }

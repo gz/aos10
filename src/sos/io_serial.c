@@ -210,3 +210,7 @@ void close_serial(file_table_entry* f) {
 	}
 
 }
+/*
+int status_serial(file_info* fi, L4_ThreadId_t receiver, L4_Msg_t* msg_p) {
+
+}*/

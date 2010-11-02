@@ -66,8 +66,6 @@ int read(fildes_t file, char* buf, size_t to_read) {
 		return -1;
 
 	assert(received <= MAX_IO_BUF && received <= to_read);
-
-
 	memcpy(buf, ipc_memory_start, received);
 
 	return received;
@@ -111,21 +109,30 @@ int write(fildes_t file, const char* buf, size_t nbyte) {
 
 
 int getdirent(int pos, char *name, size_t nbyte) {
+	assert(nbyte < MAX_IO_BUF);
+	if(name == NULL)
+		return -1;
+
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_GETDIRENT, &msg, 1, pos);
 	assert(L4_UntypedWords(tag) == 1);
+	int received = L4_MsgWord(&msg, 0);
 
-	return L4_MsgWord(&msg, 0);
+	if(received > 0)
+		memcpy(name, ipc_memory_start, min(nbyte, received+1));
+
+	return received;
 }
 
 
 int stat(const char *path, stat_t *buf) {
+
 	if(path == NULL || buf == NULL)
 		return -1;
 	assert(strlen(path) <= MAX_PATH_LENGTH);
 
   	data_ptr write_buffer = ipc_memory_start;
-	memcpy(write_buffer, path, strlen(path));
+  	strcpy(write_buffer, path);
 
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_STAT, &msg, 0);
