@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <assert.h>
 #include <string.h>
 #include <nfs.h>
@@ -96,18 +97,21 @@ static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 	if(status == NFS_OK) {
 		int new_size = attr->size;
-		int bytes_written = new_size - f->file->status.st_size;
-		f->write_position += bytes_written;
+		f->write_position += f->to_write;
 
 		// update file attributes
 		f->file->status.st_size = new_size;
 		f->file->status.st_atime = attr->atime.useconds / 1000;
 
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_WRITE), 1, bytes_written);
+		send_ipc_reply(f->owner, SOS_WRITE, 1, f->to_write);
+	}
+	else if(status == NFSERR_NOSPC) {
+		// TODO no space left on device (return number of bytes written)
+		assert("implement no more space left on device");
 	}
 	else {
 		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_WRITE), 1, -1);
+		send_ipc_reply(f->owner, SOS_WRITE, 1, -1);
 	}
 
 }
