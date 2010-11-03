@@ -85,10 +85,9 @@ void serial_receive_handler(struct serial* ser, char c) {
 }
 
 
-int open_serial(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
+void open_serial(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 	assert(get_process(tid) != NULL);
 	file_table_entry** file_table = get_process(tid)->filetable;
-	fmode_t mode = L4_MsgWord(msg_p, 0);
 
 	int fd = -1;
 	if( (fd = find_free_file_slot(file_table)) != -1) {
@@ -103,7 +102,9 @@ int open_serial(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 			else {
 				// only one process allowed for writing
 				L4_ThreadSwitch(fi->reader);
-				return IPC_SET_ERROR(-1);
+
+				send_ipc_reply(tid, SOS_OPEN, 1, -1);
+				return;
 			}
 
 		}
@@ -117,10 +118,10 @@ int open_serial(file_info* fi, L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 		file_table[fd]->to_write = 0;
 		file_table[fd]->client_buffer = NULL;
 		file_table[fd]->mode = mode;
-
 	}
 
-	return set_ipc_reply(msg_p, 1, fd);
+	send_ipc_reply(tid, SOS_OPEN, 1, fd);
+	return;
 }
 
 

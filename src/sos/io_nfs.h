@@ -7,9 +7,10 @@
 
 void nfs_readdir_callback(uintptr_t, int, int, struct nfs_filename*, int);
 
-int open_nfs(file_info*, L4_ThreadId_t, L4_Msg_t*);
+void open_nfs(file_info*, L4_ThreadId_t, fmode_t);
 void read_nfs(file_table_entry* f);
 void write_nfs(file_table_entry* f);
+void create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode);
 
 
 #endif /* IO_NFS_H_ */

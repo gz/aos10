@@ -21,7 +21,7 @@ typedef struct finfo {
 
 	struct cookie nfs_handle;
 
-	int  (*open)  (struct finfo*, L4_ThreadId_t, L4_Msg_t*);
+	void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t mode);
 	void (*write) (struct fentry*);					/**< write function called for this file */
 	void (*read)  (struct fentry*);					/**< read function called for this file  */
 	void (*close) (struct fentry*);					/**< close function called for this file */

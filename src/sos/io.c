@@ -181,13 +181,15 @@ int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	int index = -1;
 	if( (index = find_file(name)) == -1 ) {
-		// TODO: file does not exist, create file
-		// index = create_file(name);
+		// file does not exist, create file
+		create_nfs(name, tid, mode);
 	}
-	assert((index = find_file(name)) != -1); // file must exist now
+	else {
+		file_info* fi = file_cache[index];
+		fi->open(fi, tid, mode);
+	}
 
-	file_info* fi = file_cache[index];
-	return fi->open(fi, tid, msg_p);
+	return 0; // callback handled by open/or create_nfs
 }
 
 

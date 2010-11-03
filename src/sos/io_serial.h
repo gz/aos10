@@ -6,7 +6,7 @@
 
 struct serial* console_init(void);
 
-int open_serial(file_info*, L4_ThreadId_t, L4_Msg_t*);
+void open_serial(file_info*, L4_ThreadId_t, fmode_t);
 void read_serial(file_table_entry*);
 void write_serial(file_table_entry*);
 void close_serial(file_table_entry*);
