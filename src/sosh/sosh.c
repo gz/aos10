@@ -84,6 +84,8 @@ static int cp(int argc, char **argv) {
 		return 1;
 	}
 
+	close(fd);
+	close(fd_out);
 	return 0;
 }
 

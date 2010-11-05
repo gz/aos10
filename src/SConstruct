@@ -45,6 +45,7 @@ rootserver_env.AddLibrary("lwip")
 rootserver_env.AddLibrary("nfs")
 rootserver_env.AddLibrary("serial")
 rootserver_env.AddLibrary("sos_shared")
+rootserver_env.AddLibrary("clock")
 sos = rootserver_env.Application("sos");
 
 timer_syscall_milestone = 3
