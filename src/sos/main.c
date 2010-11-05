@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <sos_shared.h>
+#include <clock.h>
 
 #include "l4.h"
 #include "libsos.h"
@@ -44,6 +45,7 @@ static void init_thread(void)
     network_init();
 	io_init();
 
+
     // Loop through the BootInfo starting executables
     int i;
     L4_Word_t task = 0;
@@ -61,6 +63,15 @@ static void init_thread(void)
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
+
+    /*
+    start_timer();
+    for(i=0; i<10; i++) {
+    	for(int j=0; j<99000000; j++) {
+    		// wait
+    	}
+    	dprintf(0, "timestamp is:%lld\n", time_stamp());
+    }*/
 
     // Thread finished - block forever
     for (;;)

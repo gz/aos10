@@ -166,16 +166,13 @@ void io_init() {
  */
 int open_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
-	dprintf(0, "---- NEW OPEN FILE ----\n");
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 1) {
-		dprintf(0, "ipc error at line: %d\n", __LINE__);
 		send_ipc_reply(tid, SOS_OPEN, 1, -1);
 		return 0;
 	}
 
 	fmode_t mode = L4_MsgWord(msg_p, 0);
 	if(mode != O_RDONLY && mode != O_RDWR && mode != O_WRONLY) {
-		dprintf(0, "ipc error at line: %d\n", __LINE__);
 		send_ipc_reply(tid, SOS_OPEN, 1, -1);
 		return 0;
 	}

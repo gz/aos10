@@ -5,7 +5,6 @@ long time_stamp(void) {
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_TIMESTAMP, &msg, 0);
 	assert(L4_UntypedWords(tag) == 1);
-
 	return 0;
 }
 
