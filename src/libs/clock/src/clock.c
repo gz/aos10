@@ -1,18 +1,25 @@
+#include <assert.h>
 #include <l4/thread.h>
 #include <l4/misc.h>
 #include <l4/space.h>
 #include "clock.h"
 #include "nslu2.h"
 
-static timestamp_t timestamp = 0;
+static timestamp timestamp = 0;
+static alarm_timer* timer_queue_head = NULL;
+
 
 #define GET_LOW(timestamp) ( ((L4_Word_t)(timestamp)) & 0xFFFFFFFF)
 #define GET_HIGH(timestamp) ((timestamp) & 0xFFFFFFFF00000000)
-
 #define OST_TS (NSLU2_OSTS_PHYS_BASE + 0)
+
+void timer_queue_insert(alarm_timer* new_timer) {
+	assert(a != NULL);
+}
 
 int start_timer(void) {
 
+	// Set up uncached memory mapping for registers
 	L4_Fpage_t targetFpage = L4_FpageLog2(NSLU2_OSTS_PHYS_BASE, 12);
 	L4_Set_Rights(&targetFpage, L4_FullyAccessible);
 
@@ -27,6 +34,10 @@ int start_timer(void) {
 	}
 }
 
+static void wakeup(alarm_timer* a) {
+
+}
+
 /**
  *
  * @param delay
@@ -34,15 +45,22 @@ int start_timer(void) {
  * @return
  */
 int register_timer(uint64_t delay, L4_ThreadId_t client) {
+	alarm_timer* new_alarm = malloc( sizeof(alarm_timer) );
+	new_alarm->expiration_time = time_stamp() + delay;
+	new_alarm->alarm_function = &wakeup;
+	new_alarm->owner = client;
+
+	timer_queue_insert(new_alarm);
+
 	return CLOCK_R_FAIL;
 }
 
 
-timestamp_t time_stamp(void) {
+timestamp time_stamp(void) {
 
-	L4_Word_t current_low = (*(L4_Word_t*)OST_TS);
+	timestamp current_low = TICKS_TO_MICROSECONDS( (*(L4_Word_t*)OST_TS) ); // TODO verfy correctness (no overflow while converting to microseconds?)
 	if(GET_LOW(timestamp) > current_low)
-		timestamp += ((timestamp_t)1) << 32;
+		timestamp += ((timestamp)1) << 32;
 	timestamp = GET_HIGH(timestamp) | current_low;
 
 	return timestamp;

@@ -136,8 +136,8 @@
 #define NSLU2_SW_INT1_IRQ	(30)
 #define NSLU2_SW_INT2_IRQ	(31)
 
-// Bus frequency to microsecond converter routines
-#define NSLU2_TICKS2US(ticks)	((ticks) * 50ULL / 3333ULL)
-#define NSLU2_US2TICKS(us)	((us) * 3333ULL / 50ULL)
+// Bus frequency to microsecond converter routines (50/3333) => 66.66 Mhz
+#define TICKS_TO_MICROSECONDS(ticks)	((ticks) * 50ULL / 3333ULL)
+#define MICROSECONDS_TO_TICKS(us)	((us) * 3333ULL / 50ULL)
 
 #endif // _NSLU2_H

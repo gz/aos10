@@ -64,14 +64,15 @@ static void init_thread(void)
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
 
-    /*
+
     start_timer();
+    dprintf(0, "started timer\n");
     for(i=0; i<10; i++) {
     	for(int j=0; j<99000000; j++) {
     		// wait
     	}
     	dprintf(0, "timestamp is:%lld\n", time_stamp());
-    }*/
+    }
 
     // Thread finished - block forever
     for (;;)
