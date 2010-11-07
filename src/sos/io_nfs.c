@@ -29,10 +29,10 @@
  */
 static void nfs_set_status_callback(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 
-	int index = (int) token;
-	stat_t* stat = &file_cache[index]->status;
+	file_info* fi = (file_info*) token;
+	stat_t* stat = &fi->status;
 
-	file_cache[index]->nfs_handle = *fh; // copy the file handle
+	fi->nfs_handle = *fh; // copy the file handle
 
 	if(status == NFS_OK) {
 		stat->st_size = attr->size;
@@ -47,6 +47,8 @@ static void nfs_set_status_callback(uintptr_t token, int status, struct cookie* 
 			stat->st_fmode |= FM_WRITE;
 		if(attr->mode & 0000100)
 			stat->st_fmode |= FM_EXEC;
+
+		file_cache_insert(fi);
 	}
 	else {
 		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
@@ -63,9 +65,8 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 	file_info* fi = (file_info*) token;
 
 	if(status == NFS_OK) {
-		int inserted_at = file_cache_insert(fi); // TODO: should be after nfs_set_status
 		int mode = fi->status.st_fmode;
-		nfs_set_status_callback(inserted_at, NFS_OK, fh, attr);
+		nfs_set_status_callback((int)fi, NFS_OK, fh, attr);
 		open_nfs(fi, fi->reader, mode);
 	}
 	else {
@@ -253,8 +254,7 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 				fi->close = NULL;
 				fi->reader = L4_anythread;
 
-				int inserted_at = file_cache_insert(fi);
-				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status_callback, inserted_at);
+				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status_callback, (int)fi);
 			} // else ignore . and ..
 
 		}
