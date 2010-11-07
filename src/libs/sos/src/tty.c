@@ -15,6 +15,12 @@ size_t sos_write(const void *vData, long int position, size_t count, void *handl
 
 
 size_t sos_read(void *vData, long int position, size_t count, void *handle) {
-	return read(stdout_fd, vData, count);
+	int fd = -1;
+	while( (fd = open("consle", O_RDONLY)) == -1) { /* busy waiting */ }
+
+	int rd = read(fd, vData, count);
+
+	close(fd);
+	return rd;
 }
 

@@ -12,14 +12,14 @@
 #define CLOCK_R_CNCL (-2)	/* operation cancelled (driver stopped) */
 #define CLOCK_R_FAIL (-3)	/* operation failed for other reason */
 
-typedef uint64_t timestamp;
+typedef uint64_t timestamp_t;
 
-struct alarm_timer;
-typedef void (*alarm_function)(struct alarm_timer *a);
+struct al;
+typedef void (*alarm_function)(struct al *a);
 
 typedef struct al {
-  struct alarm_timer  *next_alarm;	/* next alarm in chain */
-  timestamp expiration_time;		/* expiration time */
+  struct al  *next_alarm;	/* next alarm in chain */
+  timestamp_t expiration_time;		/* expiration time */
   alarm_function alarm_function;		/* function to call when expired */
   L4_ThreadId_t owner;
 } alarm_timer;
@@ -46,7 +46,7 @@ int register_timer(uint64_t delay, L4_ThreadId_t client);
  *
  * Returns a negative value if failure.
  */
-timestamp time_stamp(void);
+timestamp_t time_stamp(void);
 
 /*
  * Stop clock driver operation.
@@ -54,5 +54,9 @@ timestamp time_stamp(void);
  * Returns CLOCK_R_OK iff successful.
  */
 int stop_timer(void);
+
+
+void timer_queue_insert(alarm_timer* new_timer);
+void timer_queue_pop(void);
 
 #endif /* _CLOCK_H_ */

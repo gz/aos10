@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include <assert.h>
 #include <l4/thread.h>
 #include <l4/misc.h>
@@ -5,7 +6,7 @@
 #include "clock.h"
 #include "nslu2.h"
 
-static timestamp timestamp = 0;
+static timestamp_t current_timestamp = 0ULL;
 static alarm_timer* timer_queue_head = NULL;
 
 
@@ -14,7 +15,34 @@ static alarm_timer* timer_queue_head = NULL;
 #define OST_TS (NSLU2_OSTS_PHYS_BASE + 0)
 
 void timer_queue_insert(alarm_timer* new_timer) {
-	assert(a != NULL);
+	assert(new_timer != NULL);
+
+	if(timer_queue_head == NULL) {
+		timer_queue_head = new_timer;
+		return;
+	}
+
+	alarm_timer** atp = (alarm_timer**) timer_queue_head;
+	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
+		 if (new_timer->expiration_time < (*atp)->expiration_time) break;
+	}
+
+	// insert new_timer in the middle or at the end of the list
+	new_timer->next_alarm = *atp;
+	*atp = new_timer; // set the previous next_alarm pointer to our new inserted timer
+}
+
+L4_Bool_t timer_queue_pop() {
+
+	if(timer_queue_head != NULL) {
+		alarm_timer* old_head = timer_queue_head;
+		timer_queue_head = timer_queue_head->next_alarm;
+		free(old_head);
+		return 1;
+	}
+	else
+		return 0;
+
 }
 
 int start_timer(void) {
@@ -45,25 +73,29 @@ static void wakeup(alarm_timer* a) {
  * @return
  */
 int register_timer(uint64_t delay, L4_ThreadId_t client) {
-	alarm_timer* new_alarm = malloc( sizeof(alarm_timer) );
-	new_alarm->expiration_time = time_stamp() + delay;
+	alarm_timer* new_alarm = malloc( sizeof(alarm_timer) ); // free'd in timer_queue_remove_front
 	new_alarm->alarm_function = &wakeup;
 	new_alarm->owner = client;
+	new_alarm->next_alarm = NULL;
+	new_alarm->expiration_time = time_stamp() + delay;
 
 	timer_queue_insert(new_alarm);
+	if(timer_queue_head == new_alarm) {
+		// TODO: reset timer counter
+	}
 
-	return CLOCK_R_FAIL;
+	return CLOCK_R_OK;
 }
 
 
-timestamp time_stamp(void) {
+timestamp_t time_stamp(void) {
 
-	timestamp current_low = TICKS_TO_MICROSECONDS( (*(L4_Word_t*)OST_TS) ); // TODO verfy correctness (no overflow while converting to microseconds?)
-	if(GET_LOW(timestamp) > current_low)
-		timestamp += ((timestamp)1) << 32;
-	timestamp = GET_HIGH(timestamp) | current_low;
+	timestamp_t current_low = TICKS_TO_MICROSECONDS( (*(L4_Word_t*)OST_TS) ); // TODO verify correctness (no overflow while converting to microseconds?)
+	if(GET_LOW(current_timestamp) > current_low)
+		current_timestamp += ((timestamp_t)1) << 32;
+	current_timestamp = GET_HIGH(current_timestamp) | current_low;
 
-	return timestamp;
+	return current_timestamp;
 }
 
 

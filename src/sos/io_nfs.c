@@ -101,10 +101,10 @@ void create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
 	fi->reader = recipient; // we abuse this field to know where to send our reply in the callback
 
 	sattr_t sat;
-	sat.uid = 1000;
+	sat.uid = 1000; // set uid to 1000 because thats my uid/gid on my system
 	sat.gid = 1000;
 	sat.size = 0;
-	sat.mode = 0000400 | 0000200; // set up for RW access
+	sat.mode = 0000400 | 0000200; // set up for RW access (magic numbers from http://www.faqs.org/rfcs/rfc1094.html)
 
 	nfs_create(&mnt_point, name, &sat, &nfs_create_callback, (int)fi);
 }
@@ -203,7 +203,7 @@ static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 		send_ipc_reply(f->owner, SOS_WRITE, 1, f->to_write);
 	}
 	else if(status == NFSERR_NOSPC) {
-		send_ipc_reply(f->owner, SOS_WRITE, 1, 0); // no more space left on device
+		send_ipc_reply(f->owner, SOS_WRITE, 1, 0); // no more space left on device, assume we could not write anything
 	}
 	else {
 		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
