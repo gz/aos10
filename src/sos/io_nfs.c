@@ -1,3 +1,16 @@
+/**
+ * NFS I/O System
+ * ==============
+ * This files contains the handlers for read/write/open/getdirent/stat
+ * system calls specific to the NFS filesystem.
+ * The usual behaviour is that the create_nfs, read_nfs, and write_nfs
+ * call the NFS library function which then calls a given callback function
+ * in return. Usually we use the token value as a pointer to the file handle
+ * and store all the information about what we need to do on a callback
+ * in the file handle.
+ *
+ */
+
 #include <stdlib.h>
 #include <assert.h>
 #include <string.h>
@@ -10,7 +23,11 @@
 
 #define verbose 1
 
-static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
+
+/**
+ * Sets the status attributes for a given file_info struct.
+ */
+static void nfs_set_status_callback(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 
 	int index = (int) token;
 	stat_t* stat = &file_cache[index]->status;
@@ -37,13 +54,18 @@ static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr
 
 }
 
+/**
+ * Callback from NFS when a file has been created. Since files can only be
+ * created through the open() system call we also create a file handle and return
+ * it to the user.
+ */
 static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 	file_info* fi = (file_info*) token;
 
 	if(status == NFS_OK) {
 		int inserted_at = file_cache_insert(fi); // TODO: should be after nfs_set_status
 		int mode = fi->status.st_fmode;
-		nfs_set_status(inserted_at, NFS_OK, fh, attr);
+		nfs_set_status_callback(inserted_at, NFS_OK, fh, attr);
 		open_nfs(fi, fi->reader, mode);
 	}
 	else {
@@ -54,6 +76,14 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 	fi->reader = L4_nilthread; // hack to know where requested this file
 }
 
+
+/**
+ * Tells NFS to create a file in the given file system.
+ *
+ * @param name file name to create
+ * @param recipient the user thread which called open()
+ * @param the mode he wants to open this file in.
+ */
 void create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
 
 	file_info* fi = malloc(sizeof(file_info)); // This is never free'd but its okay
@@ -78,6 +108,16 @@ void create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
 	nfs_create(&mnt_point, name, &sat, &nfs_create_callback, (int)fi);
 }
 
+
+/**
+ * Opens a NFS file. Note that we don't need a callback here since
+ * we already cached the NFS file handle on io_init for all NFS
+ * files.
+ *
+ * @param fi pointer to the file we want to open
+ * @param tid thread which wants to open
+ * @param mode mode in which we want to open the file
+ */
 void open_nfs(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 	assert(get_process(tid) != NULL);
 	file_table_entry** file_table = get_process(tid)->filetable;
@@ -112,6 +152,10 @@ void open_nfs(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 }
 
 
+/**
+ * NFS callback function we return the read bytes back to the user.
+ * Note that a pointer to the file handle is passed as the token value.
+ */
 static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_read, char *data) {
 
 	file_table_entry* f = (file_table_entry*) token;
@@ -129,11 +173,20 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
 }
 
 
+/**
+ * Tell NFS to read a certain amount of bytes at a given read position for
+ * a given file.
+ */
 void read_nfs(file_table_entry* f) {
 	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, &nfs_read_callback, (int)f);
 }
 
 
+/**
+ * NFS callback function after we have written a given amount of bytes
+ * into a file (file handle passed through token).
+ * We also update the size and access time in the file_cache.
+ */
 static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 	file_table_entry* f = (file_table_entry*) token;
@@ -158,6 +211,10 @@ static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 }
 
+
+/**
+ * Tell NFS to write to a given file.
+ */
 void write_nfs(file_table_entry* f) {
 	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, &nfs_write_callback, (int)f);
 }
@@ -165,7 +222,7 @@ void write_nfs(file_table_entry* f) {
 
 /**
  * NFS handler for getting the info about a directory entry.
- * This handler will set up the directory cache of our root server.
+ * This handler will set up the file_cache cache of our root server.
  */
 void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct nfs_filename *filenames, int next_cookie) {
 
@@ -197,7 +254,7 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 				fi->reader = L4_anythread;
 
 				int inserted_at = file_cache_insert(fi);
-				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status, inserted_at);
+				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status_callback, inserted_at);
 			} // else ignore . and ..
 
 		}

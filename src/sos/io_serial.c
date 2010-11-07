@@ -30,6 +30,13 @@ static inline file_info* get_file_for_serial(struct serial* ser) {
 	return f;
 }
 
+/**
+ * Searches the file table of the current reader process and returns
+ * the handle which currently want's to read on the serial file.
+ *
+ * @param fi the serial file
+ * @return the entry which at the moment wants to read on the serial file.
+ */
 static file_table_entry* get_reading_file_handle(file_info* fi) {
 	file_table_entry** file_table = get_process(fi->reader)->filetable;
 
@@ -85,6 +92,13 @@ void serial_receive_handler(struct serial* ser, char c) {
 }
 
 
+/**
+ * Function called by the open_file syscall handler for serial
+ * files.
+ * The convention here is that we allow multiple writer process
+ * but only one process can open a serial file (multiple times)
+ * for reading.
+ */
 void open_serial(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 	assert(get_process(tid) != NULL);
 	file_table_entry** file_table = get_process(tid)->filetable;
@@ -132,10 +146,7 @@ void open_serial(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
  * if we have something in the buffer. This realizes the blocking read
  * call on the client side.
  *
- * Note: Special Files using this function need at least a buffer of size
- * `READ_BUFFER_SIZE`.
- *
- * @param f callee
+ * @param f file table entry of the callee
  */
 void read_serial(file_table_entry* f) {
 
@@ -149,12 +160,8 @@ void read_serial(file_table_entry* f) {
 
 
 /**
- * This is a write function for special files writing to a serial device.
- *
- * @param f special file entry (callee)
- * @param to_send amount of bytes to send
- * @param buffer send content
- * @return total bytes sent
+ * This is a write function for serial files. In case
+ * the serial device buffer should overflow we retry 20 times.
  */
 void write_serial(file_table_entry* f) {
 	// serial struct must be initialized
@@ -182,6 +189,12 @@ void write_serial(file_table_entry* f) {
 	send_ipc_reply(f->owner, SOS_WRITE, 1, total_sent);
 }
 
+
+/**
+ * Close handler for serial files. We need to make sure to unset
+ * f->file->reader if this was the last file with read access
+ * on this serial device for the closing process.
+ */
 void close_serial(file_table_entry* f) {
 
 	if(f->mode & FM_READ) {
@@ -211,7 +224,3 @@ void close_serial(file_table_entry* f) {
 	}
 
 }
-/*
-int status_serial(file_info* fi, L4_ThreadId_t receiver, L4_Msg_t* msg_p) {
-
-}*/

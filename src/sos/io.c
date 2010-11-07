@@ -1,27 +1,37 @@
 /**
  * File System
  * =============
- * This file contains the handlers for read/write/open/close syscalls.
+ * This file contains the handlers for read/write/open/close/stat/get_dirent
+ * syscalls.
  *
- * Currently we support only special files (i.e. the console file).
+ * All files are tracked in the `file_table`. The file table entries
+ * are described io.h (`file_info`). The syscall handler here will usually
+ * look up the related file on the file_table and call it's corresponding
+ * open/close/read/write function. Which at the moment either point to
+ * a corresponding function in io_serial.c or io_nfs.c depending on whether
+ * we have to deal with a console or a nfs file.
  *
- * All files are tracked in the `file_table` and are identified by
- * a file descriptor which is corresponds to the index for the given
- * file in the file table. The layout of a `file_table_entry` is
- * described in io.h.
- * File descriptors with valued below SPECIAL_FILES are treated as
- * special files they can have multiple writers but only one reader
- * thread at a time.
- * The special file called console is created in io_init. It's
- * file descriptor is 0 which corresponds to the stdout_fd defined
- * in sos.h (libsos).
+ * Open files are identified by a file descriptor which corresponds
+ * to the index of the given file handle in the file table. The layout
+ * of a `file_table_entry` is described in io.h.
+ *
+ * Every process comes with a pre initialized file descriptor 0 which
+ * has write capability for the console file. Note that the
+ * file descriptor 0 corresponds to the file descriptor stdout_fd.
  *
  * Limitations:
  * ------------------------------------
- * To make the open call more secure we introduced a MAX_PATH_LENGTH
- * of 255 characters. Because of the way we share memory on IPC calls
- * a limit of PAGESIZE-1 would be
+ * The NFS specific filehandles for every file as well as their attributes
+ * are read from the filesytem in the beginning (through io_init) and stored
+ * in a array called file_cache. This limits the files which we can handle
+ * to DIR_CACHE_SIZE.
  *
+ * We introduced a maximum path length for open calls (MAX_PATH_LENGTH)
+ * atm this is 255 characters. Because of the way we share memory on IPC calls
+ * a limit of PAGESIZE would be possible without much effort.
+ *
+ * The number of concurrently open files for a given process is
+ * restricted by PROCESS_MAX_FILES (see process.h).
  */
 
 #include <serial.h>
@@ -49,6 +59,12 @@ static circular_buffer console_circular_buffer;
 static int file_cache_next_entry = 0;
 file_info* file_cache[DIR_CACHE_SIZE];
 
+
+/**
+ * Inserts a file_info struct into the file_cache.
+ * @param fi pointer to the file_info to insert
+ * @return The index were we inserted the file.
+ */
 inline int file_cache_insert(file_info* fi) {
 	assert(file_cache_next_entry < DIR_CACHE_SIZE);
 	file_cache[file_cache_next_entry] = fi;
@@ -100,6 +116,13 @@ static int find_file(data_ptr name) {
 	return -1;
 }
 
+
+/**
+ * Finds a free file slot in a given file table.
+ * @param file_table
+ * @return Index to a free slot in the table or -1 if the
+ * file table is full.
+ */
 fildes_t find_free_file_slot(file_table_entry** file_table) {
 
 	for(int i=0; i<PROCESS_MAX_FILES; i++) {
@@ -115,6 +138,8 @@ fildes_t find_free_file_slot(file_table_entry** file_table) {
  * Initializer is called in main.c by the sos server on startup (after network init).
  * This creates a special device called "console" and links it with the serial
  * console.
+ * At the end we read out the NFS directory and fill up the file_cache with the
+ * files found.
  */
 void io_init() {
 
@@ -150,14 +175,12 @@ void io_init() {
 
 
 /**
- * System Call handler for open() calls. This functions works in the following
- * way:
- * 	1. Check if there is a file in the file system with the given name
- *  2. Create the file on the file system if not found yet [TODO]
- *  3. Dispatch to files handler for open calls
+ * System Call handler for open() calls. We make sure that we get a correct
+ * IPC message and copy the filename to open in a location only accessible
+ * by the root server.
  *
- * A IPC message is sent back to the callee containing the file descriptor
- * or -1 on error.
+ * We return -1 to the callee if the IPC message has a wrong number of
+ * arguments or the name is NULL or the mode is not a valid access mode.
  *
  * @param tid Caller Thread ID
  * @param msg_p IPC Message containing requested file access mode in Word 0
@@ -288,6 +311,14 @@ int close_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 }
 
 
+/**
+ * System call handler for the stat syscall.
+ *
+ * @param tid Caller Thread ID
+ * @param msg_p IPC message
+ * @param buf Contains the filename for the file we wan't to lookup
+ * @return 1 because this system call can be handled directly.
+ */
 int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(buf == NULL || L4_UntypedWords(msg_p->tag) != 0)
@@ -310,9 +341,8 @@ int stat_file(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 
 /**
- * System Call handler for getting the info about a directory entry.
- * This function does a lookup in the global IO file_cache
- * and returns the filename to the client.
+ * System Call handler for getting the information about a directory entry.
+ * This function does a lookup in the global IO file_cache.
  */
 int get_dirent(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
