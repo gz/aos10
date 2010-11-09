@@ -107,7 +107,8 @@ pid_t process_wait(pid_t pid);
 /**
  * Returns time in microseconds since booting.
  */
-long time_stamp(void);
+//long time_stamp(void);
+uint64_t time_stamp(void);
 
 /**
  * Sleeps for the specified number of milliseconds.

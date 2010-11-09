@@ -152,6 +152,7 @@ static int exec(int argc, char **argv) {
 	return 0;
 }
 
+
 static int dir(int argc, char **argv) {
 	int i = 0, r;
 	char buf[BUF_SIZ];
@@ -193,13 +194,56 @@ static int dir(int argc, char **argv) {
 	return 0;
 }
 
+static int uptime(int argc, char **argv) {
+
+	if (argc != 1) {
+		printf("usage: %s\n", argv[0]);
+		return 1;
+	}
+
+
+	uint64_t current = time_stamp();
+	int in_seconds = current / 1000000;
+
+	int seconds   = in_seconds % 60;
+	int in_minutes = in_seconds / 60;
+	int minutes   = in_minutes % 60;
+	int in_hours   = in_minutes / 60;
+	int hours     = in_hours % 24;
+	int days      = in_hours / 24;
+
+	printf("System running since: %d Days, %d Hours, %d Minutes, %d Seconds\n", days, hours, minutes, seconds);
+	return 0;
+}
+
+static int wait(int argc, char **argv) {
+
+	if (argc != 2) {
+		printf("usage: %s <seconds>\n", argv[0]);
+		return 1;
+	}
+
+	sleep(atoi(argv[1])*1000);
+	return 0;
+}
+
+
+
 struct command {
 	char *name;
 	int (*command)(int argc, char **argv);
 };
 
-struct command commands[] = { { "dir", dir }, { "ls", dir }, { "cat", cat }, {
-		"cp", cp }, { "ps", ps }, { "exec", exec } };
+struct command commands[] = {
+		{ "dir", dir },
+		{ "ls", dir },
+		{ "cat", cat },
+		{ "cp", cp },
+		{ "ps", ps },
+		{ "exec", exec },
+		{ "uptime", uptime },
+		{ "wait", wait }
+};
 
 int main(void) {
 	char buf[BUF_SIZ];

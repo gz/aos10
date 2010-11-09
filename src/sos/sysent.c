@@ -29,6 +29,7 @@
 
 #include <assert.h>
 #include <sos_shared.h>
+#include <clock.h>
 
 #include "sysent.h"
 #include "io.h"
@@ -51,6 +52,8 @@ void init_systable() {
 	register_syscall(SOS_CLOSE, &close_file);
 	register_syscall(SOS_STAT, &stat_file);
 	register_syscall(SOS_GETDIRENT, &get_dirent);
+	register_syscall(SOS_SLEEP, &sleep_timer);
+	register_syscall(SOS_TIMESTAMP, &send_timestamp);
 
 	register_syscall(SOS_UNMAP_ALL, &pager_unmap_all);
 }

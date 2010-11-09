@@ -15,6 +15,7 @@
 #include <stdint.h>
 #include <sos_shared.h>
 #include <clock.h>
+#include <nslu2.h>
 
 #include "l4.h"
 #include "libsos.h"
@@ -42,9 +43,9 @@ static L4_Word_t init_stack_s[STACK_SIZE];
 static void init_thread(void)
 {
     // Initialise the network for libsos_logf_init
-    network_init();
+    start_timer();
+	network_init();
 	io_init();
-
 
     // Loop through the BootInfo starting executables
     int i;
@@ -65,14 +66,15 @@ static void init_thread(void)
     }
 
 
-    start_timer();
-    dprintf(0, "started timer\n");
-    for(i=0; i<10; i++) {
-    	for(int j=0; j<99000000; j++) {
-    		// wait
-    	}
-    	dprintf(0, "timestamp is:%lld\n", time_stamp());
-    }
+    //register_timer(1000000, L4_Pager());
+    /*
+    for(i=0; i<100; i++) {
+    	//for(int j=0; j<99000000; j++) {
+    	// wait
+    	//}
+    	register_timer(1000000*i, L4_Pager());
+    	//dprintf(0, "timestamp is:%llu\n", time_stamp());
+    }*/
 
     // Thread finished - block forever
     for (;;)
@@ -123,7 +125,7 @@ static __inline__ void syscall_loop(void)
 		// At this point we have, probably, received an IPC
 		L4_MsgStore(tag, &msg);
 
-		dprintf(2, "%s: got msg from %lx, (%d %p)\n", __FUNCTION__, L4_ThreadNo(tid), (int) GET_SYSCALL_NR(tag), (void *) L4_MsgWord(&msg, 0));
+		dprintf(2, "%s: got msg from %lx (version:%lx), (%d %p)\n", __FUNCTION__, L4_ThreadNo(tid), L4_Version(tid), (int) GET_SYSCALL_NR(tag), (void *) L4_MsgWord(&msg, 0));
 
 		reply = 1; // In most cases we will want to send a reply
 		int sysnr = GET_SYSCALL_NR(tag);
@@ -138,9 +140,12 @@ static __inline__ void syscall_loop(void)
 
 			// Handle Interrupts
 			case L4_INTERRUPT:
-				if (0); // Received an interrupt, you need to implement this side
+				if(L4_ThreadNo(tid) == NSLU2_TIMESTAMP_IRQ) // Received an interrupt, you need to implement this side
+					reply = timer_overflow_irq(tid, &msg);
+				else if(L4_ThreadNo(tid) == NSLU2_TIMER0_IRQ)
+					reply = timer0_irq(tid, &msg);
 				else
-				network_irq(&tid, &reply);
+					network_irq(&tid, &reply);
 			break;
 
 			// Handle System calls

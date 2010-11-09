@@ -26,6 +26,7 @@
 
 #include <nfs.h>
 #include <serial.h>
+#include <clock.h>
 
 #include "libsos.h"
 
@@ -386,6 +387,12 @@ void *sos_malloc(uint32_t size)
 
 void sos_usleep(uint32_t microseconds)
 {
+/*	register_timer(microseconds, L4_Myself());
+	L4_ThreadId_t tid = L4_Pager();
+	L4_MsgTag_t tag = L4_Wait(&tid);
+	tag.raw = 0;*/
+	//assert(tag.raw != 0);
+
     utimer_sleep(microseconds);	// M4 must change to your timer
 }
 

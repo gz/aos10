@@ -2,6 +2,7 @@
 #define _CLOCK_H_
 
 #include <l4/types.h>
+#include <l4/ipc.h>
 #include <stdint.h>
 
 /*
@@ -15,7 +16,7 @@
 typedef uint64_t timestamp_t;
 
 struct al;
-typedef void (*alarm_function)(struct al *a);
+typedef void (*alarm_function)(L4_ThreadId_t, int);
 
 typedef struct al {
   struct al  *next_alarm;	/* next alarm in chain */
@@ -56,7 +57,15 @@ timestamp_t time_stamp(void);
 int stop_timer(void);
 
 
-void timer_queue_insert(alarm_timer* new_timer);
-void timer_queue_pop(void);
+void timer_queue_insert(alarm_timer*);
+alarm_timer* timer_queue_pop(void);
+
+int timer_overflow_irq(L4_ThreadId_t, L4_Msg_t*);
+int timer0_irq(L4_ThreadId_t, L4_Msg_t*);
+
+
+int sleep_timer(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int send_timestamp(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+
 
 #endif /* _CLOCK_H_ */
