@@ -15,7 +15,7 @@
 
 #include "libsos.h"
 
-#define UDP_PAYLOAD 500 // 0 - 65535
+#define UDP_PAYLOAD 500 // 0 - 1490
 
 // Needs to be called every 100ms by somebody
 extern void nfs_timeout(void);

@@ -216,8 +216,55 @@ static int uptime(int argc, char **argv) {
 	return 0;
 }
 
+#define MAX_BENCHMARK_EXP 12
+#define BENCHMARK_FILENAME "benchmark_" // max 31 chars!
+
 static int benchmark(int argc, char **argv) {
-	
+	// write files of different sizes and take time
+	for (unsigned int exp = 0; exp < MAX_BENCHMARK_EXP; exp++) {
+		// allocate a buffer to write the file
+		int buf_size = (1 << exp)*sizeof(char);
+		char* buf = malloc(buf_size);
+		memset(buf,'x',buf_size);
+		printf("buffer of size %d bytes created.\n", buf_size);
+		// construct filename with buffer size
+		char filename[32] = BENCHMARK_FILENAME;
+		sprintf(filename,"%s%d",BENCHMARK_FILENAME,buf_size);
+		// get current time stamp before writing file
+		uint64_t start = time_stamp();
+		// open file to write, write the whole buffer, close the file
+		fildes_t fd = open(filename, FM_WRITE);
+		int num_written = write(fd, buf, buf_size);
+		close(fd);
+		// get current time stamp after writing file
+		uint64_t end = time_stamp();
+		// print result
+		printf("%d of %d bytes have been written in %llu us.\n", num_written, buf_size, end-start);
+		// free buffer
+		free(buf);
+	}
+	// read the previously written files and take time
+	for (unsigned int exp = 0; exp < MAX_BENCHMARK_EXP; exp++) {
+		// allocate a buffer to read the file into
+		int buf_size = (1 << exp)*sizeof(char);
+		char* buf = malloc(buf_size);
+		printf("buffer of size %d bytes created.\n", buf_size);
+		// construct filename with buffer size
+		char filename[32] = BENCHMARK_FILENAME;
+		sprintf(filename,"%s%d",BENCHMARK_FILENAME,buf_size);
+		// get current time stamp before writing file
+		uint64_t start = time_stamp();
+		// open file to write, write the whole buffer, close the file
+		fildes_t fd = open(filename, FM_READ);
+		int num_read = read(fd, buf, buf_size);
+		close(fd);
+		// get current time stamp after writing file
+		uint64_t end = time_stamp();
+		// print result
+		printf("%d bytes have been read of a file with size %d in %llu us.\n", num_read, buf_size, end-start);
+		// free buffer
+		free(buf);
+	}
 	return 0;
 }
 
