@@ -216,55 +216,57 @@ static int uptime(int argc, char **argv) {
 	return 0;
 }
 
-#define MAX_BENCHMARK_EXP 12
-#define BENCHMARK_FILENAME "benchmark_" // max 31 chars!
+#define BENCHMARK_FILESIZE		(1 << 13)
+#define BENCHMARK_MAXREQSIZE	(1 << 10)
+#define BENCHMARK_MINREQSIZE	(1 << 10)
+#define BENCHMARK_FILENAME		"benchmark"
 
 static int benchmark(int argc, char **argv) {
-	// write files of different sizes and take time
-	for (unsigned int exp = 0; exp < MAX_BENCHMARK_EXP; exp++) {
-		// allocate a buffer to write the file
-		int buf_size = (1 << exp)*sizeof(char);
-		char* buf = malloc(buf_size);
-		memset(buf,'x',buf_size);
-		printf("buffer of size %d bytes created.\n", buf_size);
-		// construct filename with buffer size
-		char filename[32] = BENCHMARK_FILENAME;
-		sprintf(filename,"%s%d",BENCHMARK_FILENAME,buf_size);
+	// allocate a buffer to write files from and read files into
+	int buf_size = BENCHMARK_FILESIZE*sizeof(char);
+	char* buf = malloc(buf_size);
+	memset(buf,'x',buf_size);
+	printf("buffer of size %d bytes created.\n", buf_size);
+	// write the file several times while using different request sizes
+	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
+			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
 		// get current time stamp before writing file
 		uint64_t start = time_stamp();
 		// open file to write, write the whole buffer, close the file
-		fildes_t fd = open(filename, FM_WRITE);
-		int num_written = write(fd, buf, buf_size);
+		fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
+		int num_written = 0;
+		for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += req_size) {
+			num_written += write(fd, bufptr, req_size);
+		}
 		close(fd);
 		// get current time stamp after writing file
 		uint64_t end = time_stamp();
 		// print result
-		printf("%d of %d bytes have been written in %llu us.\n", num_written, buf_size, end-start);
-		// free buffer
-		free(buf);
+		double time = ((double)(end-start)) / 1000000.0;
+		double speed = buf_size / time;
+		printf("%d of %d bytes, in chunks of size %d bytes, have been written in %.3f s.\nWriting speed: %.3f bytes/s\n", num_written, buf_size, req_size, time, speed);
 	}
-	// read the previously written files and take time
-	for (unsigned int exp = 0; exp < MAX_BENCHMARK_EXP; exp++) {
-		// allocate a buffer to read the file into
-		int buf_size = (1 << exp)*sizeof(char);
-		char* buf = malloc(buf_size);
-		printf("buffer of size %d bytes created.\n", buf_size);
-		// construct filename with buffer size
-		char filename[32] = BENCHMARK_FILENAME;
-		sprintf(filename,"%s%d",BENCHMARK_FILENAME,buf_size);
+	// read the previously written file several times while using different request sizes
+	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
+			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
 		// get current time stamp before writing file
 		uint64_t start = time_stamp();
 		// open file to write, write the whole buffer, close the file
-		fildes_t fd = open(filename, FM_READ);
-		int num_read = read(fd, buf, buf_size);
+		fildes_t fd = open(BENCHMARK_FILENAME, FM_READ);
+		int num_read = 0;
+		for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += req_size) {
+			num_read += read(fd, bufptr, req_size);
+		}
 		close(fd);
 		// get current time stamp after writing file
 		uint64_t end = time_stamp();
 		// print result
-		printf("%d bytes have been read of a file with size %d in %llu us.\n", num_read, buf_size, end-start);
-		// free buffer
-		free(buf);
+		double time = ((double)(end-start)) / 1000000.0;
+		double speed = buf_size / time;
+		printf("%d of %d bytes, in chunks of size %d bytes, have been read in %.3f s.\nReading speed: %.3f bytes/s\n", num_read, buf_size, req_size, time, speed);
 	}
+	// free buffer
+	free(buf);
 	return 0;
 }
 
