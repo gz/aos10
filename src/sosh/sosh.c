@@ -216,6 +216,11 @@ static int uptime(int argc, char **argv) {
 	return 0;
 }
 
+static int benchmark(int argc, char **argv) {
+	
+	return 0;
+}
+
 static int wait(int argc, char **argv) {
 
 	if (argc != 2) {
@@ -242,7 +247,8 @@ struct command commands[] = {
 		{ "ps", ps },
 		{ "exec", exec },
 		{ "uptime", uptime },
-		{ "wait", wait }
+		{ "wait", wait },
+		{ "benchmark", benchmark }
 };
 
 int main(void) {
