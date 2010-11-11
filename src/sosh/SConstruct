@@ -1,6 +1,6 @@
 Import("*")
 
-sources=Split("sosh.c")
+sources=Split("sosh.c benchmark.c")
 obj = env.MyProgram("sosh", sources, LIBS=["c", "l4", "sos", "sos_shared"])
 
 Return("obj")

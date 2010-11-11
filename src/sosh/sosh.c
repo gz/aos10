@@ -14,6 +14,8 @@
 /* Your OS header file */
 #include <sos.h>
 
+#include "benchmark.h"
+
 #define BUF_SIZ   128
 #define MAX_ARGS   32
 
@@ -213,94 +215,6 @@ static int uptime(int argc, char **argv) {
 	int days      = in_hours / 24;
 
 	printf("System running since: %d Days, %d Hours, %d Minutes, %d Seconds\n", days, hours, minutes, seconds);
-	return 0;
-}
-
-#define BENCHMARK_FILESIZE		(1 << 11)
-#define BENCHMARK_MAXREQSIZE	(1 << 10)
-#define BENCHMARK_MINREQSIZE	(1 << 5)
-#define BENCHMARK_FILENAME		"benchmark"
-
-static int benchmark(int argc, char **argv) {
-	// allocate a buffer to write files from and read files into
-	int buf_size = BENCHMARK_FILESIZE*sizeof(char);
-	char* buf = malloc(buf_size);
-	memset(buf,'x',buf_size);
-	printf("buffer of size %d bytes created.\n", buf_size);
-	// warmup phase 1 (write)
-	/*printf("Warmup phase 1 (write): ");
-	// open file to write, write the whole buffer, close the file
-	fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
-	int num_written = 0;
-	for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += BENCHMARK_MAXREQSIZE) {
-		num_written += write(fd, bufptr, BENCHMARK_MAXREQSIZE);
-		printf(". ");
-	}
-	close(fd);
-	// warmup phase 2 (read)
-	printf("\nWarmup phase 2 (read): ");
-	// open file to write, write the whole buffer, close the file
-	fd = open(BENCHMARK_FILENAME, FM_READ);
-	int num_read = 0;
-	for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += BENCHMARK_MAXREQSIZE) {
-		num_read += read(fd, bufptr, BENCHMARK_MAXREQSIZE);
-		printf(". ");
-	}
-	close(fd);
-	printf("\n");*/
-	// write the file several times while using different request sizes
-	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
-			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
-		// get current time stamp before writing file
-		uint64_t start = time_stamp();
-		// open file to write, write the whole buffer, close the file
-		printf("trying req_size:%d\n", req_size);
-		fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
-		int num_written = 0;
-		for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += req_size) {
-			num_written += write(fd, bufptr, req_size);
-		}
-		close(fd);
-		// get current time stamp after writing file
-		uint64_t end = time_stamp();
-		// print result
-		uint64_t time_us = end-start;
-		unsigned int time_ms = (unsigned int)(time_us / 1000);
-		unsigned int time_s = (unsigned int)(time_us / 1000000);
-		unsigned int time_ms_part = time_ms - (time_s * 1000);
-		unsigned int speed = (unsigned int)((uint64_t)buf_size * 1000000 / time_us);
-		unsigned int speed_part = (unsigned int)((uint64_t)buf_size * 1000000000 / time_us) - (speed * 1000);
-		printf("Written %d of %d bytes, in chunks of size %d bytes, in %d.%d s.\n", num_written, buf_size, req_size, time_s, time_ms_part);
-		printf("Exact time in microseconds: %llu us\n", time_us);
-		printf("Writing speed: %d.%d bytes/s\n", speed, speed_part);
-	}
-	// read the previously written file several times while using different request sizes
-	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
-			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
-		// get current time stamp before writing file
-		uint64_t start = time_stamp();
-		// open file to write, write the whole buffer, close the file
-		fildes_t fd = open(BENCHMARK_FILENAME, FM_READ);
-		int num_read = 0;
-		for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += req_size) {
-			num_read += read(fd, bufptr, req_size);
-		}
-		close(fd);
-		// get current time stamp after writing file
-		uint64_t end = time_stamp();
-		// print result
-		uint64_t time_us = end-start;
-		unsigned int time_ms = (unsigned int)(time_us / 1000);
-		unsigned int time_s = (unsigned int)(time_us / 1000000);
-		unsigned int time_ms_part = time_ms - (time_s * 1000);
-		unsigned int speed = (unsigned int)((uint64_t)buf_size * 1000000 / time_us);
-		unsigned int speed_part = (unsigned int)((uint64_t)buf_size * 1000000000 / time_us) - (speed * 1000);
-		printf("Read %d of %d bytes, in chunks of size %d bytes, in %d.%d s.\n", num_read, buf_size, req_size, time_s, time_ms_part);
-		printf("Exact time in microseconds: %llu us\n", time_us);
-		printf("Reading speed: %d.%d bytes/s\n", speed, speed_part);
-	}
-	// free buffer
-	free(buf);
 	return 0;
 }
 
