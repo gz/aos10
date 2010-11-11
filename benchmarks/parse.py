@@ -4,7 +4,7 @@
 #
 from math import sqrt
 
-f = open('udp_1490.txt')
+f = open('udp_1490_read.txt')
 
 read = False
 read_values = {}
