@@ -4,7 +4,7 @@
 #
 from math import sqrt
 
-f = open('5x512.txt')
+f = open('udp_1490.txt')
 
 read = False
 read_values = {}
@@ -32,8 +32,15 @@ for line in f:
 
 #print read_values
 #print write_values
-    
+
+print "read"
 for key, values in read_values.items():
+    mean = sum(values) / len(values)
+    deviation = sqrt( sum(map(lambda x: (x-mean)**2, values)) / (len(values)-1) )
+    print key, mean, deviation
+
+print "write"
+for key, values in write_values.items():
     mean = sum(values) / len(values)
     deviation = sqrt( sum(map(lambda x: (x-mean)**2, values)) / (len(values)-1) )
     print key, mean, deviation
