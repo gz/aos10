@@ -36,8 +36,8 @@ static void print_result(int num_written, unsigned int req_size, uint64_t time_u
 	unsigned int time_ms = (unsigned int)(time_us / 1000);
 	unsigned int time_s = (unsigned int)(time_us / 1000000);
 	unsigned int time_ms_part = time_ms - (time_s * 1000);
-	unsigned int speed = (unsigned int)((uint64_t)buffer_size * 1000000 / time_us);
-	unsigned int speed_part = (unsigned int)((uint64_t)buffer_size * 1000000000 / time_us) - (speed * 1000);
+	unsigned int speed = (unsigned int)((uint64_t)num_written * 1000000 / time_us);
+	unsigned int speed_part = (unsigned int)((uint64_t)num_written * 1000000000 / time_us) - (speed * 1000);
 
 	// output
 	PRINT_VERBOSE("Written %d of %d bytes, in chunks of size %d bytes, in %d.%d s.\n", num_written, buffer_size, req_size, time_s, time_ms_part);
