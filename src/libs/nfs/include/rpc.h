@@ -6,7 +6,7 @@
 // #include "nfs.h"
 
 /* this is general */
-#define SETBUF_LEN 1024
+#define SETBUF_LEN 1023
 typedef struct setbuf
 {
 	char buf[ SETBUF_LEN ];

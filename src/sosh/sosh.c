@@ -216,9 +216,9 @@ static int uptime(int argc, char **argv) {
 	return 0;
 }
 
-#define BENCHMARK_FILESIZE		(1 << 13)
+#define BENCHMARK_FILESIZE		(1 << 11)
 #define BENCHMARK_MAXREQSIZE	(1 << 10)
-#define BENCHMARK_MINREQSIZE	(1 << 4)
+#define BENCHMARK_MINREQSIZE	(1 << 5)
 #define BENCHMARK_FILENAME		"benchmark"
 
 static int benchmark(int argc, char **argv) {
@@ -228,7 +228,7 @@ static int benchmark(int argc, char **argv) {
 	memset(buf,'x',buf_size);
 	printf("buffer of size %d bytes created.\n", buf_size);
 	// warmup phase 1 (write)
-	printf("Warmup phase 1 (write): ");
+	/*printf("Warmup phase 1 (write): ");
 	// open file to write, write the whole buffer, close the file
 	fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
 	int num_written = 0;
@@ -247,13 +247,14 @@ static int benchmark(int argc, char **argv) {
 		printf(". ");
 	}
 	close(fd);
-	printf("\n");
+	printf("\n");*/
 	// write the file several times while using different request sizes
 	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
 			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
 		// get current time stamp before writing file
 		uint64_t start = time_stamp();
 		// open file to write, write the whole buffer, close the file
+		printf("trying req_size:%d\n", req_size);
 		fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
 		int num_written = 0;
 		for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += req_size) {
