@@ -9,7 +9,7 @@
 #include "nslu2.h"
 #include "../../../sos/libsos.h"
 
-#define verbose 3
+#define verbose 0
 
 static timestamp_t current_timestamp_high = 0ULL;
 static alarm_timer* timer_queue_head = NULL;
