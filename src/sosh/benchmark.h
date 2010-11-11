@@ -2,9 +2,8 @@
 #define BENCHMARK_H_
 
 /* Benchmark Settings */
-#define BENCHMARK_CALLS   		2048
 #define BENCHMARK_REPETITIONS	5
-#define BENCHMARK_FILESIZE		(1 << 15)
+#define BENCHMARK_CALLS   		1024
 #define BENCHMARK_MAXREQSIZE	(1 << 9)
 #define BENCHMARK_MINREQSIZE	(1 << 4)
 #define BENCHMARK_FILENAME		"benchmark"

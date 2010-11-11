@@ -56,10 +56,12 @@ static void measure(benchmark_function_ptr io_function) {
 		fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
 		int num_written = 0;
 		uint64_t time_us = 0ULL;
+		char* bufptr = buffer;
 
 		uint64_t start = time_stamp();
-		for (char* bufptr = buffer; bufptr < buffer+buffer_size; bufptr += req_size) {
+		for (int i=0; i < BENCHMARK_CALLS; i++) {
 			num_written += io_function(fd, bufptr, req_size);
+			bufptr += req_size;
 		}
 		uint64_t end = time_stamp();
 		time_us += end-start;
@@ -75,7 +77,7 @@ int benchmark(int argc, char **argv) {
 	for(int z=0; z<BENCHMARK_REPETITIONS; z++) {
 
 		// Allocate a buffer to write files from and read files into
-		buffer_size = BENCHMARK_FILESIZE*sizeof(char);
+		buffer_size = BENCHMARK_MAXREQSIZE*BENCHMARK_CALLS;
 		buffer = malloc(buffer_size);
 		memset(buffer,'x',buffer_size);
 		PRINT_VERBOSE("Buffer of size %d bytes created.\n", buffer_size);
