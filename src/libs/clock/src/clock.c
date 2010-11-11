@@ -46,11 +46,10 @@ void timer_queue_insert(alarm_timer* new_timer) {
 		return;
 	}
 
-	alarm_timer** atp = (alarm_timer**) timer_queue_head;
+	alarm_timer** atp = (alarm_timer**) &timer_queue_head;
 	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
 		 if (new_timer->expiration_time < (*atp)->expiration_time) break;
 	}
-
 	// insert new_timer in the middle or at the end of the list
 	new_timer->next_alarm = *atp;
 	*atp = new_timer; // set the previous next_alarm pointer to our new inserted timer
@@ -170,17 +169,17 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
 	new_alarm->next_alarm = NULL;
 	new_alarm->expiration_time = time_stamp() + delay;
 
+	//dprintf(0, "new_alarm->expiration_time:%llu\ntimer_queue_head->expiration_time:%llu\n", new_alarm->expiration_time, timer_queue_head->expiration_time);
 	// disable interrupts while modifying the queue
 	L4_DeassociateInterrupt(timer0_irq_tid);
 	timer_queue_insert(new_alarm);
 	L4_AssociateInterrupt(timer0_irq_tid, root_thread_g);
 
-
 	if(timer_queue_head == new_alarm) {
 		TIMER0_SET(MICROSECONDS_TO_TICKS(delay));
 		TIMER0_START();
 
-		dprintf(1, "register_timer: Next alarm in: %lld us\n", delay);
+		dprintf(1, "register_timer: new front timer: Next alarm in: %lld us\n", delay);
 	}
 
 	return CLOCK_R_OK;
@@ -238,3 +237,9 @@ int send_timestamp(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
 	timestamp_t uptime = time_stamp();
 	return set_ipc_reply(msg_p, 2, GET_LOW(uptime), GET_HIGH(uptime));
 }
+
+/*void test_the_clock() {
+	assert(start_timer() == CLOCK_R_OK);
+	assert(stop_timer() == CLOCK_R_OK);
+	assert(register_timer(100ULL, L4_nilthread) == CLOCK_R_UINT);
+}*/

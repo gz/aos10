@@ -67,5 +67,6 @@ int timer0_irq(L4_ThreadId_t, L4_Msg_t*);
 int sleep_timer(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int send_timestamp(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
+//void test_the_clock(void);
 
 #endif /* _CLOCK_H_ */
