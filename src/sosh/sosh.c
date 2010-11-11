@@ -218,7 +218,7 @@ static int uptime(int argc, char **argv) {
 
 #define BENCHMARK_FILESIZE		(1 << 13)
 #define BENCHMARK_MAXREQSIZE	(1 << 10)
-#define BENCHMARK_MINREQSIZE	(1 << 10)
+#define BENCHMARK_MINREQSIZE	(1 << 4)
 #define BENCHMARK_FILENAME		"benchmark"
 
 static int benchmark(int argc, char **argv) {
@@ -227,6 +227,27 @@ static int benchmark(int argc, char **argv) {
 	char* buf = malloc(buf_size);
 	memset(buf,'x',buf_size);
 	printf("buffer of size %d bytes created.\n", buf_size);
+	// warmup phase 1 (write)
+	printf("Warmup phase 1 (write): ");
+	// open file to write, write the whole buffer, close the file
+	fildes_t fd = open(BENCHMARK_FILENAME, FM_WRITE);
+	int num_written = 0;
+	for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += BENCHMARK_MAXREQSIZE) {
+		num_written += write(fd, bufptr, BENCHMARK_MAXREQSIZE);
+		printf(". ");
+	}
+	close(fd);
+	// warmup phase 2 (read)
+	printf("\nWarmup phase 2 (read): ");
+	// open file to write, write the whole buffer, close the file
+	fd = open(BENCHMARK_FILENAME, FM_READ);
+	int num_read = 0;
+	for (char* bufptr = buf; bufptr < buf+buf_size; bufptr += BENCHMARK_MAXREQSIZE) {
+		num_read += read(fd, bufptr, BENCHMARK_MAXREQSIZE);
+		printf(". ");
+	}
+	close(fd);
+	printf("\n");
 	// write the file several times while using different request sizes
 	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
 			req_size <= BENCHMARK_MAXREQSIZE; req_size <<= 1) {
@@ -242,9 +263,15 @@ static int benchmark(int argc, char **argv) {
 		// get current time stamp after writing file
 		uint64_t end = time_stamp();
 		// print result
-		double time = ((double)(end-start)) / 1000000.0;
-		double speed = buf_size / time;
-		printf("%d of %d bytes, in chunks of size %d bytes, have been written in %.3f s.\nWriting speed: %.3f bytes/s\n", num_written, buf_size, req_size, time, speed);
+		uint64_t time_us = end-start;
+		unsigned int time_ms = (unsigned int)(time_us / 1000);
+		unsigned int time_s = (unsigned int)(time_us / 1000000);
+		unsigned int time_ms_part = time_ms - (time_s * 1000);
+		unsigned int speed = (unsigned int)((uint64_t)buf_size * 1000000 / time_us);
+		unsigned int speed_part = (unsigned int)((uint64_t)buf_size * 1000000000 / time_us) - (speed * 1000);
+		printf("Written %d of %d bytes, in chunks of size %d bytes, in %d.%d s.\n", num_written, buf_size, req_size, time_s, time_ms_part);
+		printf("Exact time in microseconds: %llu us\n", time_us);
+		printf("Writing speed: %d.%d bytes/s\n", speed, speed_part);
 	}
 	// read the previously written file several times while using different request sizes
 	for (unsigned int req_size = BENCHMARK_MINREQSIZE;
@@ -261,9 +288,15 @@ static int benchmark(int argc, char **argv) {
 		// get current time stamp after writing file
 		uint64_t end = time_stamp();
 		// print result
-		double time = ((double)(end-start)) / 1000000.0;
-		double speed = buf_size / time;
-		printf("%d of %d bytes, in chunks of size %d bytes, have been read in %.3f s.\nReading speed: %.3f bytes/s\n", num_read, buf_size, req_size, time, speed);
+		uint64_t time_us = end-start;
+		unsigned int time_ms = (unsigned int)(time_us / 1000);
+		unsigned int time_s = (unsigned int)(time_us / 1000000);
+		unsigned int time_ms_part = time_ms - (time_s * 1000);
+		unsigned int speed = (unsigned int)((uint64_t)buf_size * 1000000 / time_us);
+		unsigned int speed_part = (unsigned int)((uint64_t)buf_size * 1000000000 / time_us) - (speed * 1000);
+		printf("Read %d of %d bytes, in chunks of size %d bytes, in %d.%d s.\n", num_read, buf_size, req_size, time_s, time_ms_part);
+		printf("Exact time in microseconds: %llu us\n", time_us);
+		printf("Reading speed: %d.%d bytes/s\n", speed, speed_part);
 	}
 	// free buffer
 	free(buf);
