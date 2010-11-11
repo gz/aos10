@@ -387,11 +387,24 @@ void *sos_malloc(uint32_t size)
 
 void sos_usleep(uint32_t microseconds)
 {
-/*	register_timer(microseconds, L4_Myself());
+/*
+	L4_Msg_t msg;
 	L4_ThreadId_t tid = L4_Pager();
-	L4_MsgTag_t tag = L4_Wait(&tid);
-	tag.raw = 0;*/
-	//assert(tag.raw != 0);
+
+    L4_Accept(L4_UntypedWordsAcceptor);
+    L4_MsgClear(&msg);
+
+   	L4_MsgAppendWord(&msg, (L4_Word_t) microseconds);
+
+    // Set Label and prepare message
+    L4_Set_MsgLabel(&msg, CREATE_SYSCALL_NR(SOS_SLEEP));
+    L4_MsgLoad(&msg);
+
+    // Sending Message
+	L4_MsgTag_t tag = L4_Call(L4_Pager());
+	if(L4_IpcFailed(tag)) {
+		dprintf(0, "sos_usleep failed (ipc error:%d).", type);
+	}*/
 
     utimer_sleep(microseconds);	// M4 must change to your timer
 }
