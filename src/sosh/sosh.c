@@ -224,9 +224,12 @@ static int wait(int argc, char **argv) {
 		printf("usage: %s <seconds>\n", argv[0]);
 		return 1;
 	}
-
-	sleep(atoi(argv[1])*1000);
-	return 0;
+	if(atoi(argv[1]) > 0) {
+		sleep(atoi(argv[1])*1000);
+		return 0;
+	}
+	else
+		return -1;
 }
 
 

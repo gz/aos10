@@ -5,10 +5,8 @@
 #include <l4/ipc.h>
 #include <stdint.h>
 
-/*
- * Return codes for driver functions
- */
-#define CLOCK_R_OK     0	/* success */
+/** Return codes for driver functions */
+#define CLOCK_R_OK     0	/* success  */
 #define CLOCK_R_UINT (-1)	/* driver not initialised */
 #define CLOCK_R_CNCL (-2)	/* operation cancelled (driver stopped) */
 #define CLOCK_R_FAIL (-3)	/* operation failed for other reason */
@@ -18,11 +16,12 @@ typedef uint64_t timestamp_t;
 struct al;
 typedef void (*alarm_function)(L4_ThreadId_t, int);
 
+/** Timer Queue elements */
 typedef struct al {
-  struct al  *next_alarm;	/* next alarm in chain */
-  timestamp_t expiration_time;		/* expiration time */
-  alarm_function alarm_function;		/* function to call when expired */
-  L4_ThreadId_t owner;
+  struct al  *next_alarm;			/**< next alarm in queue */
+  timestamp_t expiration_time;		/**< time in microseconds since booting when this timer should ring */
+  alarm_function alarm_function;	/**< function to be called when we reached expiration time */
+  L4_ThreadId_t owner;				/**< the client who "owns" this timer */
 } alarm_timer;
 
 

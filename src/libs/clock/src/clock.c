@@ -1,3 +1,30 @@
+/**
+ * Clock Driver
+ * =============
+ * This files contains the function to handle our timer register
+ * and the system call handlers for sleep and time_stamp.
+ * For the time_stamp measurement we use the time stamp timer register
+ * of the IXP42X Hardware and for sleep calls we use the
+ * General-Purpose Timer 0.
+ *
+ * A sleep system call basically uses the register timer function
+ * of the clock driver interface. Register timer will insert
+ * an alarm_timer struct into a priority queue and reset the timer
+ * if we have a new alarm_timer in the front of the queue.
+ * The General-Purpose Timer 0 is programmed to give an interrupt
+ * whenever it reaches zero. In that case timer0_irq is called
+ * as the interrupt handler. The alarm_timer has an alarm_function
+ * which is called by the interrupt handler when the alarm is triggered.
+ * Currently we use only wakeup since we only register timers for sleep
+ * calls. But the way we implemented it, we could extend it easily.
+ *
+ * The timestamp timer is started in start_timer and interrupts every time
+ * its register overflows. We maintain a current_timestamp_high value where
+ * we basically add the ticks of MAXINT converted to microseconds every time
+ * a interrupt happens.
+ *
+ */
+
 #include <stdlib.h>
 #include <assert.h>
 #include <l4/thread.h>
@@ -11,10 +38,12 @@
 
 #define verbose 0
 
+// Internal Driver Functions
 static timestamp_t current_timestamp_high = 0ULL;
 static alarm_timer* timer_queue_head = NULL;
 static L4_Bool_t driver_initialized = FALSE;
 
+// Register Mapping
 static L4_ThreadId_t timestamp_irq_tid;
 static L4_ThreadId_t timer0_irq_tid;
 static L4_Fpage_t registers_fpage;
@@ -26,8 +55,6 @@ static L4_Fpage_t registers_fpage;
 #define OST_STATUS (NSLU2_OSTS_PHYS_BASE + 0x20)
 
 // Macros to control Timer 0
-//#define TIMER0_SET(count)	((*(L4_Word_t*)OST_TIM0_RL)  = ((count) & ~0x3) | ((*(L4_Word_t*)OST_TIM0_RL) & 0x3) )
-//#define TIMER0_START()		((*(L4_Word_t*)OST_TIM0_RL) |=  1)
 #define TIMER0_SET(count)	((*(L4_Word_t*)OST_TIM0_RL)  = ((count) & ~0x3) | 0x2 )
 #define TIMER0_START()		((*(L4_Word_t*)OST_TIM0_RL) |= 0x1)
 #define TIMER0_STOP()		((*(L4_Word_t*)OST_TIM0_RL)  = (*(L4_Word_t*)OST_TIM0_RL) & ~0x1)
@@ -38,6 +65,13 @@ static L4_Fpage_t registers_fpage;
 #define GET_HIGH(timestamp) ((timestamp) & 0xFFFFFFFF00000000)
 
 
+/**
+ * Inserts an alarm_timer in the priority queue. Queue
+ * is sorted based on the expiration time. Lower
+ * expiration time before higher.
+ *
+ * @param new_timer the timer to insert
+ */
 void timer_queue_insert(alarm_timer* new_timer) {
 	assert(new_timer != NULL);
 
@@ -55,6 +89,13 @@ void timer_queue_insert(alarm_timer* new_timer) {
 	*atp = new_timer; // set the previous next_alarm pointer to our new inserted timer
 }
 
+
+/**
+ * Removes the top element from the timer queue.
+ *
+ * @return The top element in the timer queue. This is the one
+ * with the lowest expiration_time.
+ */
 alarm_timer* timer_queue_pop() {
 
 	if(timer_queue_head != NULL) {
@@ -67,6 +108,16 @@ alarm_timer* timer_queue_pop() {
 
 }
 
+
+/**
+ * Starts the clock driver. This will map the memory region where the
+ * registers are in uncached mode, start the time stamp timer register
+ * and enable the interrupts for our time stamp timer and the general
+ * purpose timer 0.
+ *
+ * @return CLOCK_R_OK if the timer is started successfully
+ * 		   CLOCK_R_FAIL if the memory region could not be mapped
+ */
 int start_timer(void) {
 	assert(!driver_initialized);
 
@@ -105,6 +156,17 @@ int start_timer(void) {
 	}
 }
 
+
+/**
+ * Interrupt handler for our timestamp timer. This Interrupt happens every time
+ * the timer register overflows. In that case we update our current_timestamp_high
+ * value and mask the interrupt. This function also sets the IPC message
+ * to return to the interrupt thread.
+ *
+ * @param tid Interrupt handler Thread id
+ * @param msg_p IPC message
+ * @return 1 to tell the syscall loop to send a reply
+ */
 int timer_overflow_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 	assert( ((*(L4_Word_t*)OST_STATUS) >> 2) & 0x1); // this must only be called during interrupt
 
@@ -115,6 +177,18 @@ int timer_overflow_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 }
 
 
+/**
+ * General Purpose Timer 0 Interrupt handler. This Interrupt happens when
+ * we can handle our alarm_timer in the front of our queue.
+ * In this interrupt we also check for follwoing timers which will be due within
+ * a certain range and call their alarm_function.
+ * This function also frees the allocated alarm_timer memory whenever they are
+ * removed from the queue.
+ *
+ * @param tid Interrupt Thread ID
+ * @param msg_p IPC message
+ * @return 1 because we wan't to send a reply in the syscall loop
+ */
 int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 	assert( ((*(L4_Word_t*)OST_STATUS)) & 0x1); // this must only be called during interrupt
 	assert(timer_queue_head != NULL);
@@ -145,16 +219,33 @@ int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 
 
 
+/**
+ * Alarm timer function for sleep calls (wakes up the corresponding thread).
+ *
+ * @param tid Client thread ID to wakeup
+ * @param status The status sent back to the client this will usually be CLOCK_R_OK
+ * but if timer_stop() is called before sleep returns CLOCK_R_CNCL is sent.
+ * However currently this is not checked in the client (because of the prototype of
+ * sleep).
+ */
 static void wakeup(L4_ThreadId_t tid, int status) {
 	dprintf(1, "Alarm Timer from:0x%X is ringing with status:%d\n", tid, status);
 	send_ipc_reply(tid, SOS_SLEEP, 1, status);
 }
 
+
 /**
+ * Inserts a new alarm timer in the timer queue. This will also restart
+ * the timer whenever we have a new head element.
+ * Notice that this will construct a alarm_timer struct and set its
+ * alarm_function to point to wakeup. Since we only support sleep
+ * right now this is ok.
  *
- * @param delay
- * @param client
- * @return
+ * @param delay microseconds when the timer should be triggered
+ * @param client which user should be triggered
+ * @return CLOCK_R_OK if the timer driver is started
+ * 		   CLOCK_R_UNIT if the driver is not started yet
+ * 		   CLOCK_R_FAIL if we don't have memory for our alarm_timer
  */
 int register_timer(uint64_t delay, L4_ThreadId_t client) {
 	if(!driver_initialized)
@@ -186,6 +277,9 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
 }
 
 
+/**
+ * @return The microseconds since booting.
+ */
 timestamp_t time_stamp(void) {
 	if(!driver_initialized)
 		return CLOCK_R_UINT;
@@ -195,6 +289,13 @@ timestamp_t time_stamp(void) {
 }
 
 
+/**
+ * Stops our timer driver. This will turn off the Interrupts, unmap the
+ * register fpage, stop the timre registers and wakeup all alarm_timers
+ * currently in the queue with status CLOCK_R_CNCL.
+ *
+ * @return CLOCK_R_OK
+ */
 int stop_timer(void) {
 	assert(driver_initialized);
 
@@ -218,6 +319,15 @@ int stop_timer(void) {
 }
 
 
+/**
+ * Sleep system call handler (called by our syscall loop).
+ * This will register a alarm_timer in our timer queue.
+ *
+ * @param tid Client Thread ID
+ * @param msg_p IPC Message
+ * @param ipc_memory Shared IPC memory region (not used)
+ * @return 0 since we don't wan't to reply to client (yet)
+ */
 int sleep_timer(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
 
 	if(L4_UntypedWords(msg_p->tag) != 1)
@@ -233,10 +343,21 @@ int sleep_timer(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
 }
 
 
+/**
+ * Time stamp system call handler. Returns the value of timestamp.
+ * We stick the 64byte value of time_stamp() into two 32bytes message
+ * registers.
+ *
+ * @param tid Thread ID
+ * @param msg_p IPC Message
+ * @param ipc_memory Shared IPC memory (not used)
+ * @return 1 since we wan't to return to the client immediately
+ */
 int send_timestamp(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
 	timestamp_t uptime = time_stamp();
 	return set_ipc_reply(msg_p, 2, GET_LOW(uptime), GET_HIGH(uptime));
 }
+
 
 /*void test_the_clock() {
 	assert(start_timer() == CLOCK_R_OK);
