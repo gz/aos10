@@ -1,0 +1,22 @@
+initially all pages from frame_alloc marked dirty
+
+---
+timer goes off at x ms
+ - pick random mapped page
+ - unmaps from kernel pagetable (& flush cache?)
+ - puts page in working set
+
+OR:
+
+pagefault happens, frame_alloc != NULL
+ - insert page in circular list
+
+timer goes off at x ms
+ - unmap all pages inserted into circular list since last trigger
+---
+
+pagefault happens, frame_alloc == NULL
+ - pick a page in working set which is not mapped back into the kernel
+ - if dirty bit is set (page is mapped with write perms), swap page to disk
+ - remove dirty bit: set the access rights to read only
+

@@ -74,7 +74,7 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 		send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
 	}
 
-	fi->reader = L4_nilthread; // hack to know where requested this file
+	fi->reader = L4_nilthread; // hack to know who requested this file
 }
 
 

@@ -233,6 +233,32 @@ static int wait(int argc, char **argv) {
 }
 
 
+#define NPAGES 128
+static int thrash(int argc, char **argv) {
+
+    char* space = malloc(NPAGES * 1024);
+    assert(space);
+
+    // check that we are not in physical memory
+    assert((void *) space > (void *) 0x2000000);
+
+    // set heap memory
+    for(int i = 0; i < NPAGES; i += 4)
+    	space[i * 1024] = i;
+
+    // unmap pages
+    sos_debug_flush();
+
+    // verify
+    for(int i = 0; i < NPAGES; i += 4)
+    	assert(space[i*1024] == i);
+
+    free(space);
+
+    return 0;
+}
+
+
 
 struct command {
 	char *name;
@@ -248,7 +274,8 @@ struct command commands[] = {
 		{ "exec", exec },
 		{ "uptime", uptime },
 		{ "wait", wait },
-		{ "benchmark", benchmark }
+		{ "benchmark", benchmark },
+		{ "thrash", thrash }
 };
 
 int main(void) {

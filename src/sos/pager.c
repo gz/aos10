@@ -67,7 +67,7 @@ for(int i=0; i<4096; i++) {
 #include "libsos.h"
 #include "syscalls.h"
 
-#define verbose 0
+#define verbose 3
 
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)
@@ -109,14 +109,6 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 		return L4_NoAccess;
 	}
 
-	// Root server permissions (only physical memory)
-	if(tid.raw == L4_Myself().raw) {
-		if(addr < VIRTUAL_START)
-			return L4_FullyAccessible;
-		else
-			return L4_NoAccess;
-	}
-
 	// User space physical memory permission
 	if(addr < VIRTUAL_START)
 		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
@@ -125,7 +117,7 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 	if(addr >= HEAP_START && addr < HEAP_END)
 		return L4_ReadWriteOnly;
 
-	// Heap permissions
+	// IPC permissions
 	if(addr >= IPC_START && addr < IPC_END)
 		return L4_ReadWriteOnly;
 
@@ -247,7 +239,14 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
 			return 0;
+			// swap out page [picked based on second chance replacement]
+			// mark as swapped
+			// unmap fpage
+			// frame_free
+			// repeat frame_alloc
 		}
+		// insert into circular list
+
 		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
 
