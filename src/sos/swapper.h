@@ -1,19 +1,17 @@
 #ifndef SWAPPER_H_
 #define SWAPPER_H_
 
-struct clit;
-typedef struct clit {
-	struct clit previous;
-	struct clit next;
+#include "pager.h"
+#include "queue.h"
+
+typedef struct pit {
+	TAILQ_ENTRY(pit) entries;
 
 	L4_ThreadId_t tid;
-	void* table_entry;
-} clock_item;
+	L4_Word_t virtual_address;
+	page_table_entry* table_entry;
 
-
-void clock_page_insert(clock_item*);
-clock_item* clock_get_oldest(void);
-clock_item* clock_remove_oldest(void);
+} page_queue_item;
 
 
 #endif /* SWAPPER_H_ */

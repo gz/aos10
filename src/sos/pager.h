@@ -8,7 +8,7 @@
 /** List element used in the first level page table */
 typedef struct page_entry {
 	void* address;
-} page_t;
+} page_table_entry;
 
 void pager_init(void);
 void pager(L4_ThreadId_t, L4_Msg_t*);

@@ -12,7 +12,7 @@ typedef struct {
 	L4_ThreadId_t tid;
 
 	file_table_entry* filetable[PROCESS_MAX_FILES];
-	page_t* pagetable;
+	page_table_entry* pagetable;
 
 } process;
 

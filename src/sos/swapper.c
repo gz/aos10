@@ -1,36 +1,36 @@
 #include "swapper.h"
 
-static clock_item* oldest = NULL;
+//static clock_item* oldest = NULL;
 
-void clock_page_insert(clock_item* ci) {
+void cil_insert(clock_item* list, clock_item* ci) {
+	assert(ci->next == NULL);
+	assert(ci->previous == NULL);
 
 	// first item
-	if(oldest == NULL) {
-		oldest = ci;
+	if(list == NULL) {
 		ci->next = ci;
 		ci->previous = ci;
 		return;
 	}
 
-	clock_item* old_prev = oldest->previous;
-	ci->next = oldest;
+	clock_item* old_prev = list->previous;
+	ci->next = list;
 	ci->previous = old_prev;
 
-	oldest->previous = ci;
+	list->previous = ci;
 	old_prev->next = ci;
 }
 
-clock_item* clock_get_oldest() {
-	return oldest;
-}
+void cil_remove(clock_item* ci) {
+	assert(ci->previous != NULL);
+	assert(ci->next != NULL);
 
-clock_item* clock_remove_oldest() {
-	clock_item* to_remove = oldest;
+	clock_item* to_remove = ci;
 
-	oldest->previous->next = oldest->next;
-	oldest->next->previous = oldest->previous;
+	ci->previous->next = ci->next;
+	ci->next->previous = ci->previous;
 
-	oldest = oldest->next;
+	ci = ci->next;
 
 	return to_remove;
 }

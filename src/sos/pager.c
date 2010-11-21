@@ -63,6 +63,7 @@ for(int i=0; i<4096; i++) {
 #include <l4/cache.h>
 
 #include "pager.h"
+#include "swapper.h"
 #include "frames.h"
 #include "libsos.h"
 #include "syscalls.h"
@@ -92,8 +93,9 @@ for(int i=0; i<4096; i++) {
 #define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
-static page_t* first_level_table = NULL;
-
+static page_table_entry* first_level_table = NULL;
+static TAILQ_HEAD(tailhead, pit) active_pages_head;
+struct tailhead *headp;
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -148,7 +150,7 @@ inline static L4_Bool_t is_access_granted(L4_ThreadId_t tid, L4_Word_t addr, L4_
  * @param index where to look at
  * @return page table entry at position `index`
  */
-static page_t* first_level_lookup(L4_Word_t index) {
+static page_table_entry* first_level_lookup(L4_Word_t index) {
 	assert(index >= 0 && index < FIRST_LEVEL_ENTRIES);
 
 	return first_level_table+index;
@@ -162,7 +164,7 @@ static page_t* first_level_lookup(L4_Word_t index) {
  * @param index which table entry
  * @return table entry
  */
-static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) {
+static page_table_entry* second_level_lookup(page_table_entry* second_level_table, L4_Word_t index) {
 	assert(index >= 0 && index < SECOND_LEVEL_ENTRIES);
 	return second_level_table+index;
 }
@@ -175,13 +177,13 @@ static page_t* second_level_lookup(page_t* second_level_table, L4_Word_t index) 
  *
  * @param first_level_entry
  */
-static void create_second_level_table(page_t* first_level_entry) {
+static void create_second_level_table(page_table_entry* first_level_entry) {
 	assert(first_level_entry->address == NULL);
 
-	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_t));
+	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
 	assert(first_level_entry->address != NULL);
 
-	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_t));
+	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
 }
 
 
@@ -189,12 +191,14 @@ static void create_second_level_table(page_t* first_level_entry) {
  * Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0.
  */
 void pager_init() {
-	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_t)); // this is never freed but it's ok
+	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok
 	assert(first_level_table != NULL);
 
-	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_t));
+	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
 
 	L4_CacheFlushAll();
+
+	TAILQ_INIT(&active_pages_head);
 }
 
 
@@ -228,13 +232,13 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  */
 static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 
-	page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL) {
 		dprintf(3, "No 2nd Level table exists here. Create one.\n");
 		create_second_level_table(first_entry); // set up new 2nd level page table
 	}
 
-	page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 	if(second_entry->address == NULL) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
@@ -245,7 +249,13 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 			// frame_free
 			// repeat frame_alloc
 		}
-		// insert into circular list
+
+		// insert page into queue of active pages
+		page_queue_item* p = malloc(sizeof(page_queue_item));
+		p->tid = tid;
+		p->virtual_address = addr;
+		p->table_entry = second_entry;
+		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
 
 		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
@@ -372,11 +382,11 @@ void pager_free_all(L4_ThreadId_t tid) {
 
 void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 
-	page_t* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL)
 		return NULL;
 
-	page_t* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 
 	return second_entry->address;
 }
