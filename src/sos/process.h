@@ -5,7 +5,7 @@
 #include <l4/types.h>
 #include <l4/message.h>
 #include "io.h"
-#include "pager.h"
+#include "mm/pager.h"
 
 
 typedef struct {

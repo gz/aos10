@@ -33,7 +33,7 @@
 
 #include "sysent.h"
 #include "io.h"
-#include "pager.h"
+#include "mm/pager.h"
 
 syscall_function_ptr sysent[SYSENT_SIZE] =  {
 		[0 ... 15] = NULL

@@ -43,7 +43,7 @@
 #include "io.h"
 #include "io_serial.h"
 #include "io_nfs.h"
-#include "pager.h"
+#include "mm/pager.h"
 #include "process.h"
 #include "libsos.h"
 #include "network.h"

@@ -21,8 +21,8 @@
 #include "libsos.h"
 #include "network.h"
 
-#include "pager.h"
-#include "frames.h"
+#include "mm/pager.h"
+#include "mm/frames.h"
 #include "process.h"
 #include "io.h"
 #include "sysent.h"

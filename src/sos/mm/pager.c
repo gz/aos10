@@ -65,8 +65,7 @@ for(int i=0; i<4096; i++) {
 #include "pager.h"
 #include "swapper.h"
 #include "frames.h"
-#include "libsos.h"
-#include "syscalls.h"
+#include "../libsos.h"
 
 #define verbose 3
 
@@ -94,8 +93,8 @@ for(int i=0; i<4096; i++) {
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 static page_table_entry* first_level_table = NULL;
-static TAILQ_HEAD(tailhead, pit) active_pages_head;
-struct tailhead *headp;
+
+static struct pages_head active_pages_head;
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -227,10 +226,12 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  * physical.
  *
  * @param tid ID of thread to map for
- * @param addr Memory range to map
- * @return 0/1 based on the success/failure of MapFpage syscall or lack of available memory.
+ * @param addr memory area to map (aligned to multiple of PAGESIZE)
+ * @return	0 iff Mapping failed
+ *			1 iff Mapping success
+ *			2 iff no more free frames (swapping started)
  */
-static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
+static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 
 	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL) {
@@ -242,31 +243,32 @@ static L4_Bool_t virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 	if(second_entry->address == NULL) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
-			return 0;
-			// swap out page [picked based on second chance replacement]
-			// mark as swapped
-			// unmap fpage
-			// frame_free
-			// repeat frame_alloc
+			swap_out(&active_pages_head);
+			return 2;
 		}
+
+		// align address to be multiple of pagesize
+		addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
 
 		// insert page into queue of active pages
 		page_queue_item* p = malloc(sizeof(page_queue_item));
+		assert(p != NULL);
 		p->tid = tid;
 		p->virtual_address = addr;
-		p->table_entry = second_entry;
+		//p->table_entry = second_entry;
 		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
 
 		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
 
- 	// TODO: currently this is aligned to be a multiple of 4096 bytes.. correct?
-	L4_Fpage_t targetFpage = L4_FpageLog2(((addr >> 12) << 12) , 12);
-	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
+	// debug
+	swap_out(&active_pages_head);
 
+	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
+	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
 	L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
 
-	dprintf(3, "Trying to map virtual address %X with physical %X\n", ((addr >> 12) << 12), (int)second_entry->address);
+	dprintf(3, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
@@ -338,7 +340,7 @@ int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 					L4_Word_t addr = CREATE_ADDRESS(i,j);
 					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
 
-					if(L4_UnmapFpage(tid, L4_FpageLog2(addr , 12)) == 0) {
+					if(L4_UnmapFpage(tid, L4_FpageLog2(addr, PAGESIZE_LOG2)) == 0) {
 						sos_print_error(L4_ErrorCode());
 						dprintf(0, "Can't unmap page at %lx\n", addr);
 					} // else success

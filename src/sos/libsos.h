@@ -145,6 +145,7 @@ extern void sos_usleep(uint32_t microseconds);
 // XXX Hack: should look this up in kip
 // #define PAGESIZE (L4_PageSizeMask(kip) + 1)
 #define PAGESIZE 4096
+#define PAGESIZE_LOG2 12
 
 
 /**

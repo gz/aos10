@@ -13,8 +13,8 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <assert.h>
-#include "libsos.h"
-#include "l4.h"
+#include "../libsos.h"
+#include "../l4.h"
 
 #include "frames.h"
 
