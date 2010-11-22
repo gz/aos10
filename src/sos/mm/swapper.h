@@ -1,6 +1,7 @@
 #ifndef SWAPPER_H_
 #define SWAPPER_H_
 
+#include <nfs.h>
 #include "pager.h"
 #include "../queue.h"
 
@@ -10,10 +11,17 @@ typedef struct pit {
 	L4_ThreadId_t tid;
 	L4_Word_t virtual_address;
 
+	int swap_offset;
+	int to_swap;
 	//page_table_entry* table_entry;
 
 } page_queue_item;
 
+/** File descriptor Index for swap file in root process filetable */
+#define SWAP_FD 1
+
 int swap_out(struct pages_head*);
+void swap_write_callback(uintptr_t, int, fattr_t*);
+void swap_read_callback(uintptr_t, int, fattr_t*, int, char*);
 
 #endif /* SWAPPER_H_ */

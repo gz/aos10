@@ -23,8 +23,8 @@
 
 #include "mm/pager.h"
 #include "mm/frames.h"
+#include "io/io.h"
 #include "process.h"
-#include "io.h"
 #include "sysent.h"
 
 #include "../libs/c/src/k_r_malloc.h"
@@ -64,17 +64,6 @@ static void init_thread(void)
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
-
-
-    //register_timer(1000000, L4_Pager());
-    /*
-    for(i=0; i<100; i++) {
-    	//for(int j=0; j<99000000; j++) {
-    	// wait
-    	//}
-    	register_timer(1000000*i, L4_Pager());
-    	//dprintf(0, "timestamp is:%llu\n", time_stamp());
-    }*/
 
     // Thread finished - block forever
     for (;;)
@@ -192,6 +181,10 @@ int main(void)
     // Initialize memory management
     frame_init((low + HEAP_SIZE), high);
     pager_init();
+
+    // Initialize process structure and register root process
+    process_init();
+    create_process(L4_Myself());
 
     // Spawn the setup thread which completes the rest of the initialization,
     // leaving this thread free to act as a pager and interrupt handler.

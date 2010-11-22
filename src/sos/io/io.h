@@ -4,8 +4,8 @@
 #include <sos_shared.h>
 #include <l4/message.h>
 #include <l4/types.h>
-#include "datastructures/circular_buffer.h"
 #include <rpc.h>
+#include "../datastructures/circular_buffer.h"
 
 struct fentry;
 struct finfo;
@@ -21,10 +21,14 @@ typedef struct finfo {
 
 	struct cookie nfs_handle;
 
-	void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t mode);
+	void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t );
 	void (*write) (struct fentry*);					/**< write function called for this file */
 	void (*read)  (struct fentry*);					/**< read function called for this file  */
 	void (*close) (struct fentry*);					/**< close function called for this file */
+
+	void (*write_callback)(uintptr_t, int, fattr_t*);
+	void (*read_callback)(uintptr_t, int, fattr_t*, int , char*);
+
 } file_info;
 
 
@@ -55,5 +59,6 @@ int stat_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 fildes_t find_free_file_slot(file_table_entry**);
 int file_cache_insert(file_info*);
+file_table_entry* create_file_descriptor(file_info*, L4_ThreadId_t, fmode_t);
 
 #endif /* IO_H_ */

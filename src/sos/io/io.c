@@ -40,13 +40,14 @@
 #include <l4/ipc.h>
 #include <l4/schedule.h>
 
+#include "../mm/pager.h"
+#include "../mm/swapper.h"
+#include "../process.h"
+#include "../libsos.h"
+#include "../network.h"
 #include "io.h"
 #include "io_serial.h"
 #include "io_nfs.h"
-#include "mm/pager.h"
-#include "process.h"
-#include "libsos.h"
-#include "network.h"
 
 #define verbose 2
 
@@ -58,7 +59,6 @@ static circular_buffer console_circular_buffer;
 // Cache for directory entries
 static int file_cache_next_entry = 0;
 file_info* file_cache[DIR_CACHE_SIZE];
-
 
 /**
  * Inserts a file_info struct into the file_cache.
@@ -133,6 +133,23 @@ fildes_t find_free_file_slot(file_table_entry** file_table) {
 	return -1;
 }
 
+file_table_entry* create_file_descriptor(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
+
+	file_table_entry* fte = malloc(sizeof(file_table_entry)); // freed on close()
+	assert(fte != NULL);
+
+	fte->file = fi;
+	fte->owner = tid;
+	fte->to_read = 0;
+	fte->to_write = 0;
+	fte->read_position = 0;
+	fte->write_position = 0;
+	fte->client_buffer = NULL;
+	fte->mode = mode;
+
+	return fte;
+}
+
 
 /**
  * Initializer is called in main.c by the sos server on startup (after network init).
@@ -168,6 +185,15 @@ void io_init() {
 	console_file->cbuffer = &console_circular_buffer;
 
 	file_cache_insert(console_file);
+
+	// initialize swap file
+	file_info* swap_file = create_nfs("swap", L4_nilthread, 0);
+	// overwrite callbacks for swap file (because of different behaviour than standard io)
+	swap_file->read_callback = &swap_read_callback;
+	swap_file->write_callback = &swap_write_callback;
+
+	// initialize file handle for swap file
+	get_process(root_thread_g)->filetable[SWAP_FD] = create_file_descriptor(swap_file, root_thread_g, FM_READ | FM_WRITE);
 
 	// Set up dir cache with files from NFS directory
 	nfs_readdir(&mnt_point, 0, MAX_PATH_LENGTH, &nfs_readdir_callback, 0);

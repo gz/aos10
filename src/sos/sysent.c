@@ -32,7 +32,7 @@
 #include <clock.h>
 
 #include "sysent.h"
-#include "io.h"
+#include "io/io.h"
 #include "mm/pager.h"
 
 syscall_function_ptr sysent[SYSENT_SIZE] =  {

@@ -15,19 +15,23 @@
 #include <assert.h>
 #include <string.h>
 #include <nfs.h>
+
+#include "../libsos.h"
+#include "../network.h"
+#include "../process.h"
 #include "io_nfs.h"
 #include "io.h"
-#include "libsos.h"
-#include "network.h"
-#include "process.h"
 
 #define verbose 1
 
 
 /**
- * Sets the status attributes for a given file_info struct.
+ * Sets the status attributes for a given file_info struct. This
+ * function is usually called in a callback context from a NFS
+ * interrupt. But it is also called directly within the
+ * nfs_create_callback function.
  */
-static void nfs_set_status_callback(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
+static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 
 	file_info* fi = (file_info*) token;
 	stat_t* stat = &fi->status;
@@ -66,47 +70,19 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 
 	if(status == NFS_OK) {
 		int mode = fi->status.st_fmode;
-		nfs_set_status_callback((int)fi, NFS_OK, fh, attr);
-		open_nfs(fi, fi->reader, mode);
+		nfs_set_status((int)fi, NFS_OK, fh, attr);
+
+		if(!L4_IsNilThread(fi->reader))
+			open_nfs(fi, fi->reader, mode);
 	}
 	else {
 		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-		send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
+
+		if(!L4_IsNilThread(fi->reader))
+			send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
 	}
 
 	fi->reader = L4_nilthread; // hack to know who requested this file
-}
-
-
-/**
- * Tells NFS to create a file in the given file system.
- *
- * @param name file name to create
- * @param recipient the user thread which called open()
- * @param the mode he wants to open this file in.
- */
-void create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
-
-	file_info* fi = malloc(sizeof(file_info)); // This is never free'd but its okay
-	assert(fi != NULL);
-	strcpy(fi->filename, name);
-	fi->cbuffer = NULL;
-	fi->serial_handle = NULL;
-	fi->open = &open_nfs;
-	fi->read = &read_nfs;
-	fi->write = &write_nfs;
-	fi->close = NULL;
-
-	fi->status.st_fmode = mode; // we abuse this field to know in which mode the client wants to open the file
-	fi->reader = recipient; // we abuse this field to know where to send our reply in the callback
-
-	sattr_t sat;
-	sat.uid = 1000; // set uid to 1000 because thats my uid/gid on my system
-	sat.gid = 1000;
-	sat.size = 0;
-	sat.mode = 0000400 | 0000200; // set up for RW access (magic numbers from http://www.faqs.org/rfcs/rfc1094.html)
-
-	nfs_create(&mnt_point, name, &sat, &nfs_create_callback, (int)fi);
 }
 
 
@@ -128,17 +104,7 @@ void open_nfs(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 
 		if((mode & fi->status.st_fmode) == mode) {
 			// if we come here it's okay to create a file descriptor
-			file_table[fd] = malloc(sizeof(file_table_entry)); // freed on close()
-			assert(file_table[fd] != NULL);
-			file_table[fd]->file = fi;
-			file_table[fd]->owner = tid;
-			file_table[fd]->to_read = 0;
-			file_table[fd]->to_write = 0;
-			file_table[fd]->read_position = 0;
-			file_table[fd]->write_position = 0;
-			file_table[fd]->client_buffer = NULL;
-			file_table[fd]->mode = mode;
-
+			file_table[fd] = create_file_descriptor(fi, tid, mode);
 			send_ipc_reply(tid, SOS_OPEN, 1, fd);
 			return;
 		}
@@ -179,7 +145,7 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
  * a given file.
  */
 void read_nfs(file_table_entry* f) {
-	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, &nfs_read_callback, (int)f);
+	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, f->file->read_callback, (int)f);
 }
 
 
@@ -214,10 +180,49 @@ static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 
 /**
+ * Tells NFS to create a file in the given file system.
+ *
+ * @param name file name to create
+ * @param recipient the user thread which called open()
+ * @param the mode he wants to open this file in.
+ * @return pointer to the created file info (this is used for
+ * swap file creation)
+ */
+file_info* create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
+
+	file_info* fi = malloc(sizeof(file_info)); // This is never free'd but its okay
+	assert(fi != NULL);
+
+	strcpy(fi->filename, name);
+	fi->cbuffer = NULL;
+	fi->serial_handle = NULL;
+	fi->open = &open_nfs;
+	fi->read = &read_nfs;
+	fi->read_callback = &nfs_read_callback;
+	fi->write = &write_nfs;
+	fi->write_callback = &nfs_write_callback;
+	fi->close = NULL;
+
+	fi->status.st_fmode = mode; // we abuse this field to know in which mode the client wants to open the file
+	fi->reader = recipient; // we abuse this field to know where to send our reply in the callback
+
+	sattr_t sat;
+	sat.uid = 1000; // set uid to 1000 because thats my uid/gid on my system
+	sat.gid = 1000;
+	sat.size = 0;
+	sat.mode = 0000400 | 0000200; // set up for RW access (magic numbers from http://www.faqs.org/rfcs/rfc1094.html)
+
+	nfs_create(&mnt_point, name, &sat, &nfs_create_callback, (int)fi);
+
+	return fi;
+}
+
+
+/**
  * Tell NFS to write to a given file.
  */
 void write_nfs(file_table_entry* f) {
-	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, &nfs_write_callback, (int)f);
+	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, f->file->write_callback, (int)f);
 }
 
 
@@ -244,18 +249,20 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 			memcpy(fi->filename, filenames[i].file, to_copy);
 			fi->filename[to_copy] = '\0';
 
-			if(strcmp(fi->filename, ".") > 0 && strcmp(fi->filename, "..") > 0) {
+			if(strcmp(fi->filename, ".") != 0 && strcmp(fi->filename, "..") != 0 && strcmp(fi->filename, "swap") != 0) {
 
 				fi->cbuffer = NULL;
 				fi->serial_handle = NULL;
 				fi->open = &open_nfs;
 				fi->read = &read_nfs;
+				fi->read_callback = &nfs_read_callback;
 				fi->write = &write_nfs;
+				fi->write_callback = &nfs_write_callback;
 				fi->close = NULL;
 				fi->reader = L4_anythread;
 
-				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status_callback, (int)fi);
-			} // else ignore . and ..
+				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status, (int)fi);
+			} // else ignore ., .., swap
 
 		}
 		else {

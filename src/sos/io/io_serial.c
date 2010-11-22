@@ -2,11 +2,11 @@
 #include <l4/types.h>
 #include <l4/ipc.h>
 
-#include "libsos.h"
-#include "process.h"
-#include "io_serial.h"
+#include "../libsos.h"
+#include "../process.h"
+#include "../datastructures/circular_buffer.h"
 #include "io.h"
-#include "datastructures/circular_buffer.h"
+#include "io_serial.h"
 
 #define verbose 2
 
@@ -20,7 +20,6 @@
  */
 static inline file_info* get_file_for_serial(struct serial* ser) {
 	file_info* f = NULL;
-
 
 	for(int i=0; i<DIR_CACHE_SIZE; i++) {
 		if(file_cache[i] != NULL && file_cache[i]->serial_handle == ser)
@@ -39,6 +38,7 @@ static inline file_info* get_file_for_serial(struct serial* ser) {
  */
 static file_table_entry* get_reading_file_handle(file_info* fi) {
 	file_table_entry** file_table = get_process(fi->reader)->filetable;
+	assert(file_table != NULL);
 
 	for(int i=0; i < PROCESS_MAX_FILES; i++) {
 		if(file_table[i] != NULL && file_table[i]->file == fi && file_table[i]->to_read > 0)
@@ -82,7 +82,6 @@ void serial_receive_handler(struct serial* ser, char c) {
 	assert(fi != NULL);
 
 	int written = circular_buffer_write(fi->cbuffer, 1, c);
-
 	file_table_entry* fh = get_reading_file_handle(fi);
 
 	// send if there is a reader and we're either at a newline or buffer has overflow
@@ -116,7 +115,6 @@ void open_serial(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 			else {
 				// only one process allowed for writing
 				L4_ThreadSwitch(fi->reader);
-
 				send_ipc_reply(tid, SOS_OPEN, 1, -1);
 				return;
 			}
@@ -124,14 +122,7 @@ void open_serial(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 		}
 
 		// if we come here we can create it's okay to create a file descriptor
-		file_table[fd] = malloc(sizeof(file_table_entry)); // freed on close()
-		assert(file_table[fd] != NULL);
-		file_table[fd]->file = fi;
-		file_table[fd]->owner = tid;
-		file_table[fd]->to_read = 0;
-		file_table[fd]->to_write = 0;
-		file_table[fd]->client_buffer = NULL;
-		file_table[fd]->mode = mode;
+		file_table[fd] = create_file_descriptor(fi, tid, mode);
 	}
 
 	send_ipc_reply(tid, SOS_OPEN, 1, fd);

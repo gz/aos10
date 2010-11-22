@@ -188,6 +188,7 @@ static void create_second_level_table(page_table_entry* first_level_entry) {
 
 /**
  * Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0.
+ *
  */
 void pager_init() {
 	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok
@@ -255,14 +256,14 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 		assert(p != NULL);
 		p->tid = tid;
 		p->virtual_address = addr;
-		//p->table_entry = second_entry;
+		p->swap_offset = -1; // this page is currently not in swap space
 		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
 
 		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
 
 	// debug
-	swap_out(&active_pages_head);
+	//swap_out(&active_pages_head);
 
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
