@@ -94,7 +94,7 @@ for(int i=0; i<4096; i++) {
 
 static page_table_entry* first_level_table = NULL;
 
-static struct pages_head active_pages_head;
+struct pages_head active_pages_head;
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -244,7 +244,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 	if(second_entry->address == NULL) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
-			swap_out(&active_pages_head);
+			swap_out(tid);
 			return 2;
 		}
 

@@ -13,6 +13,7 @@ typedef struct pit {
 
 	int swap_offset;
 	int to_swap;
+	L4_ThreadId_t initiator;
 	//page_table_entry* table_entry;
 
 } page_queue_item;
@@ -20,7 +21,7 @@ typedef struct pit {
 /** File descriptor Index for swap file in root process filetable */
 #define SWAP_FD 1
 
-int swap_out(struct pages_head*);
+int swap_out(L4_ThreadId_t);
 void swap_write_callback(uintptr_t, int, fattr_t*);
 void swap_read_callback(uintptr_t, int, fattr_t*, int, char*);
 

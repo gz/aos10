@@ -63,6 +63,7 @@ static page_queue_item* second_chance_select(struct pages_head* page_queue) {
     	}
     	else {
     		// remove the page from the working set
+    		TAILQ_REMOVE(page_queue, page, entries);
     		return page;
     	}
 
@@ -92,11 +93,15 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 					// mark as swapped
 					// free the frame
 					// restart the thread who ran out of memory
+					free(page);
+					L4_Start(page->initiator);
 				}
 				else {
 					// we have written the page while it was swapping out. this sux. restart.
+					TAILQ_INSERT_HEAD(&active_pages_head, page, entries);
 					// swap_out();
 				}
+
 			} // else: not everything has been swapped yet...
 
 		}
@@ -135,8 +140,10 @@ void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_re
 
 
 
-int swap_out(struct pages_head* page_queue) {
-	page_queue_item* page = second_chance_select(page_queue);
+int swap_out(L4_ThreadId_t initiator) {
+	L4_Stop(initiator); // stop the client thread since he has to wait until we swapped out
+
+	page_queue_item* page = second_chance_select(&active_pages_head);
 	assert(page != NULL && !is_referenced(page));
 
 	// decide where in the swap file our page will be
@@ -147,6 +154,7 @@ int swap_out(struct pages_head* page_queue) {
 	if(is_dirty(page)) {
 		dprintf(0, "selected page is dirty, need to write to swap space");
 		page->to_swap = PAGESIZE;
+		page->initiator = initiator;
 
 		file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 		assert(swap_fd != NULL);
@@ -167,6 +175,9 @@ int swap_out(struct pages_head* page_queue) {
 			);
 		}
 
+	}
+	else {
+		// not dirty, just mark page as swapped and we're done
 	}
 
 	return 0;
