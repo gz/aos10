@@ -234,26 +234,53 @@ static int wait(int argc, char **argv) {
 
 
 #define NPAGES 40
+#define NUMINTPERPAGE (1<<10)
 static int thrash(int argc, char **argv) {
 
-    char* space = malloc(NPAGES * 1024);
-    assert(space);
+	// array of pointers to the page-sized data chunks
+	unsigned int* chunks[NPAGES];
 
-    // check that we are not in physical memory
-    assert((void *) space > (void *) 0x2000000);
+	// allocate a LOT of memory
+	for (unsigned int i = 0; i < NPAGES; i++) {
+		chunks[i] = malloc(NUMINTPERPAGE*sizeof(unsigned int));
+	    // check that we are not in physical memory
+	    assert((void *) chunks[i] > (void *) 0x2000000);
+		// write numbers into it
+	    unsigned int chunknr = NUMINTPERPAGE * i;
+		for (unsigned int j = 0; j < NUMINTPERPAGE; j++) {
+			chunks[i][j] = chunknr + j;
+		}
+	}
 
-    // set heap memory
-    for(int i = 0; i < NPAGES; i += 4)
-    	space[i * 1024] = i;
+	// verify the written memory and free it again
+	for (unsigned int i = 0; i < NPAGES; i++) {
+		// check numbers in the memory
+	    unsigned int chunknr = NUMINTPERPAGE * i;
+		for (unsigned int j = 0; j < NUMINTPERPAGE; j++) {
+			assert(chunks[i][j] == chunknr + j);
+		}
+		// free current chunk
+		free(chunks[i]);
+	}
 
-    // unmap pages
-    sos_debug_flush();
-
-    // verify
-    for(int i = 0; i < NPAGES; i += 4)
-    	assert(space[i*1024] == i);
-
-    free(space);
+//    char* space = malloc(NPAGES * 1024);
+//    assert(space);
+//
+//    // check that we are not in physical memory
+//    assert((void *) space > (void *) 0x2000000);
+//
+//    // set heap memory
+//    for(int i = 0; i < NPAGES; i += 4)
+//    	space[i * 1024] = i;
+//
+//    // unmap pages
+//    //sos_debug_flush();
+//
+//    // verify
+//    for(int i = 0; i < NPAGES; i += 4)
+//    	assert(space[i*1024] == i);
+//
+//    free(space);
 
     return 0;
 }
