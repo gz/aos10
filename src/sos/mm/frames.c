@@ -11,6 +11,7 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include <stddef.h>
 #include <assert.h>
 #include "../libsos.h"
@@ -193,6 +194,7 @@ L4_Word_t frame_alloc(void) {
 	if(stack_count >= 1) {
 		L4_Word_t frame = frame_stack_remove();
 		bitfield_set(frame, 1);
+		memset((void*)frame, 0, PAGESIZE); // make sure we don't leak data to other processes
 		return frame;
 	}
 	else {

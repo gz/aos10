@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <string.h>
 #include <sos_shared.h>
 
 #include "../l4.h"
@@ -16,12 +17,6 @@
 /** This variable multiplied by PAGESIZE gives the next free area in our swap file */
 static int swap_entries = 0;
 
-/*
-static L4_Bool_t is_swapped(page_queue_item* page) {
-
-}
-
-*/
 
 static L4_Bool_t is_dirty(page_queue_item* page) {
 	/*L4_Fpage_t fpage = L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2);
@@ -53,6 +48,7 @@ static void dereference(page_queue_item* page) {
 	if(L4_UnmapFpage(page->tid, L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2)) == FALSE) {
 		dprintf(0, "Can't unmap page at 0x%X (error:%d)\n", page->virtual_address, L4_ErrorCode());
 	}
+	L4_CacheFlushAll();
 
 }
 
@@ -110,10 +106,10 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 				dprintf(0, "page is swapped out\n");
 				frame_free((L4_Word_t) pte->address);
 				mark_swapped(pte, page->swap_offset);
-				free(page);
 
 				// restart the thread who ran out of memory
 				L4_Start(page->initiator);
+				free(page);
 
 				// Please Note: Since we don't share memory across
 				// processes it cannot happen that a page is written
@@ -133,33 +129,14 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			dprintf(0, "%s: Bad NFS status (%d) from callback.\n", __FUNCTION__, status);
 			assert(FALSE);
 			// We could probably try to restart swapping here but since it failed before
-			// don't see much point in this.
+			// we don't see much point in this.
 		break;
 	}
 
 }
 
 
-void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_read, char *data) {
-
-	/*
-	file_table_entry* f = (file_table_entry*) token;
-
-	if(status == NFS_OK) {
-		f->read_position += bytes_read;
-		memcpy(f->client_buffer, data, bytes_read);
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, bytes_read);
-	}
-	else {
-		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, -1);
-	}*/
-
-}
-
-
-
-int swap_out(L4_ThreadId_t initiator) {
+void swap_out(L4_ThreadId_t initiator) {
 	L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
 
 	page_queue_item* page = second_chance_select(&active_pages_head);
@@ -196,8 +173,57 @@ int swap_out(L4_ThreadId_t initiator) {
 
 	}
 	else {
-		dprintf(0, "not dirty, just mark page as swapped and we're done\n");
+		dprintf(0, "TODO: not dirty, just mark page as swapped and we're done\n");
+	}
+}
+
+
+
+void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_read, char *data) {
+
+	page_queue_item* page = (page_queue_item*) token;
+	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
+	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
+
+	switch (status) {
+		case NFS_OK:
+		{
+			assert(bytes_read == BATCH_SIZE);
+
+			memcpy( ((char*)pte->address)+page->to_swap, data, bytes_read);
+			page->to_swap += bytes_read;
+
+			// swapping in complete
+			if(page->to_swap == PAGESIZE) {
+				// restart the thread because the page is in memory again
+				L4_Start(page->tid);
+	    		TAILQ_INSERT_TAIL(&active_pages_head, page, entries);
+			}
+			else {
+				// read next batch
+				nfs_read(&swap_fd->file->nfs_handle, page->swap_offset+page->to_swap, BATCH_SIZE, swap_fd->file->read_callback, (int)page);
+			}
+
+		}
+		break;
+
+		default:
+			dprintf(0, "%s: Bad NFS status (%d) from callback.\n", __FUNCTION__, status);
+			assert(FALSE);
+			// We could probably try to restart swapping here but since it failed before
+			// we don't see much point in this.
+		break;
 	}
 
-	return 0;
+}
+
+void swap_in(page_queue_item* page) {
+	assert(page != NULL);
+	L4_AbortIpc_and_stop_Thread(page->tid); // stop the client thread since he has to wait until we finished swapping in
+
+	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
+	assert(swap_fd != NULL);
+
+	page->to_swap = 0; // to keep track of how many bytes are read
+	nfs_read(&swap_fd->file->nfs_handle, page->swap_offset+page->to_swap, BATCH_SIZE, swap_fd->file->read_callback, (int)page);
 }

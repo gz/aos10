@@ -247,7 +247,7 @@ static int thrash(int argc, char **argv) {
     	space[i * 1024] = i;
 
     // unmap pages
-    //sos_debug_flush();
+    sos_debug_flush();
 
     // verify
     for(int i = 0; i < NPAGES; i += 4)

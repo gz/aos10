@@ -69,9 +69,11 @@ for(int i=0; i<4096; i++) {
 
 #define verbose 3
 
-#define MAPPING_SUCCESS 0
-#define MAPPING_FAILED 1
+// Return codes for virtual_mapping()
+#define MAPPING_FAILED 0
+#define MAPPING_SUCCESS 1
 #define OUT_OF_FRAMES 2
+#define PAGE_NOT_AVAILABLE 3
 
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)
@@ -86,7 +88,7 @@ for(int i=0; i<4096; i++) {
 #define HEAP_START 0x40000000
 #define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
 
-// Page table Macros and constants
+// Page table manipulation macros and constants
 #define FIRST_LEVEL_BITS 12
 #define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
 #define SECOND_LEVEL_BITS 8
@@ -96,8 +98,11 @@ for(int i=0; i<4096; i++) {
 #define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
-static page_table_entry* first_level_table = NULL;
+#define IS_SWAPPED(addr)  ((addr) & 0x1)
+#define SWAP_OFFSET(addr) ((addr) & ~0xFFF)
 
+// Global datastructures for pager
+static page_table_entry* first_level_table = NULL;
 struct pages_head active_pages_head;
 
 /**
@@ -190,6 +195,17 @@ static void create_second_level_table(page_table_entry* first_level_entry) {
 }
 
 
+static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr, int swap_offset) {
+	page_queue_item* p = malloc(sizeof(page_queue_item)); // freed by swap out or (TODO) process delete
+	assert(p != NULL);
+
+	p->tid = tid;
+	p->virtual_address = addr;
+	p->swap_offset = swap_offset;
+
+	return p;
+}
+
 /**
  * Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0.
  *
@@ -200,7 +216,6 @@ void pager_init() {
 
 	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
 
-	L4_CacheFlushAll();
 
 	TAILQ_INIT(&active_pages_head);
 }
@@ -237,6 +252,8 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  *			OUT_OF_FRAMES iff no more free frames (swapping started)
  */
 static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
+	// align address to be multiple of pagesize
+	addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
 
 	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL) {
@@ -245,6 +262,8 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 	}
 
 	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+
+	// Page referenced for the first time
 	if(second_entry->address == NULL) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
@@ -252,28 +271,35 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 			return OUT_OF_FRAMES;
 		}
 
-		// align address to be multiple of pagesize
-		addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
-
 		// insert page into queue of active pages
-		page_queue_item* p = malloc(sizeof(page_queue_item));
-		assert(p != NULL);
-		p->tid = tid;
-		p->virtual_address = addr;
-		p->swap_offset = -1; // this page is currently not in swap space
+		page_queue_item* p = create_page_queue_item(tid, addr, -1);
 		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
 
-		dprintf(3, "New allocated physical frame: %X\n", (int) second_entry->address);
+		dprintf(2, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
+	// Page is currently swapped out
+	else if(IS_SWAPPED((L4_Word_t)second_entry->address)) {
+		dprintf(3, "We need to swap in.\n");
+		L4_Word_t swap_offset = SWAP_OFFSET((L4_Word_t)second_entry->address);
 
-	// debug
-	//swap_out(&active_pages_head);
+		void* new_frame = NULL;
+		if((new_frame = (void*)frame_alloc()) == NULL) {
+			swap_out(tid);
+			return OUT_OF_FRAMES;
+		}
+
+		second_entry->address = new_frame;
+		page_queue_item* p = create_page_queue_item(tid, addr, swap_offset);
+		swap_in(p);
+		return PAGE_NOT_AVAILABLE;
+	}
+	// else page just isn't mapped in hardware
 
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
 	L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
 
-	dprintf(3, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
+	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
@@ -322,6 +348,13 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 				// we're swapping and we have stopped the thread so don't send a reply (yet)
 				// the thread will be started again once swapping is completed
 				// (see swap_write_callback)
+				return 0;
+			break;
+
+			case PAGE_NOT_AVAILABLE:
+				// we need to swap-in the requested page first
+				// since this takes some time we stopped the thread (and restart it when it's done)
+				// and don't return a IPC message
 				return 0;
 			break;
 		}
