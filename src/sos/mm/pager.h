@@ -15,10 +15,11 @@ TAILQ_HEAD(pages_head, pit);
 extern struct pages_head active_pages_head;
 
 void pager_init(void);
-void pager(L4_ThreadId_t, L4_Msg_t*);
+int pager(L4_ThreadId_t, L4_Msg_t*);
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf);
 void pager_free_all(L4_ThreadId_t);
 void* pager_physical_lookup(L4_ThreadId_t, L4_Word_t addr);
+page_table_entry* pager_table_lookup(L4_ThreadId_t, L4_Word_t);
 
 
 #endif /* PAGER_H_ */

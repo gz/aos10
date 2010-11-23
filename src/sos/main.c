@@ -124,7 +124,7 @@ static __inline__ void syscall_loop(void)
 
 			// Handle L4 Pagefaults
 			case L4_PAGEFAULT:
-				pager(tid, &msg);
+				reply = pager(tid, &msg);
 			break;
 
 			// Handle Interrupts

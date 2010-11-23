@@ -6,6 +6,7 @@
 #include "../process.h"
 #include "../io/io.h"
 #include "swapper.h"
+#include "frames.h"
 
 #define verbose 1
 
@@ -15,16 +16,25 @@
 /** This variable multiplied by PAGESIZE gives the next free area in our swap file */
 static int swap_entries = 0;
 
-static L4_Bool_t is_dirty(page_queue_item* page) {
-	return TRUE;
-}
-
 /*
 static L4_Bool_t is_swapped(page_queue_item* page) {
 
 }
 
 */
+
+static L4_Bool_t is_dirty(page_queue_item* page) {
+	/*L4_Fpage_t fpage = L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2);
+	L4_PhysDesc_t phys;
+
+	if(L4_GetStatus(page->tid, &fpage, &phys) == FALSE) {
+		dprintf(0, "Can't get status for page 0x%X (error:%d)\n", page->virtual_address, L4_ErrorCode());
+	}
+
+	return L4_WasWritten(fpage);*/
+
+	return TRUE;
+}
 
 static L4_Bool_t is_referenced(page_queue_item* page) {
 	L4_Fpage_t fpage = L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2);
@@ -72,9 +82,17 @@ static page_queue_item* second_chance_select(struct pages_head* page_queue) {
     return NULL; // no pages in queue (bad)
 }
 
+static void mark_swapped(page_table_entry* pte, int swap_location) {
+	assert(swap_location % PAGESIZE == 0);
+	assert(pte != NULL);
+
+	pte->address = (void*) (swap_location | 0x1);
+}
+
 void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 	page_queue_item* page = (page_queue_item*) token;
+	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
 	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 
 	switch (status) {
@@ -89,18 +107,17 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			// swapping complete, can we now finally free the frame?
 			if(page->to_swap == 0) {
 
-				if(!is_dirty(page)) {
-					// mark as swapped
-					// free the frame
-					// restart the thread who ran out of memory
-					free(page);
-					L4_Start(page->initiator);
-				}
-				else {
-					// we have written the page while it was swapping out. this sux. restart.
-					TAILQ_INSERT_HEAD(&active_pages_head, page, entries);
-					// swap_out();
-				}
+				dprintf(0, "page is swapped out\n");
+				frame_free((L4_Word_t) pte->address);
+				mark_swapped(pte, page->swap_offset);
+				free(page);
+
+				// restart the thread who ran out of memory
+				L4_Start(page->initiator);
+
+				// Please Note: Since we don't share memory across
+				// processes it cannot happen that a page is written
+				// to while swapping out. So this case is not handled here.
 
 			} // else: not everything has been swapped yet...
 
@@ -113,8 +130,10 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 		break;
 
 		default:
-			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-			// TODO: how to handle this?
+			dprintf(0, "%s: Bad NFS status (%d) from callback.\n", __FUNCTION__, status);
+			assert(FALSE);
+			// We could probably try to restart swapping here but since it failed before
+			// don't see much point in this.
 		break;
 	}
 
@@ -141,7 +160,7 @@ void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_re
 
 
 int swap_out(L4_ThreadId_t initiator) {
-	L4_Stop(initiator); // stop the client thread since he has to wait until we swapped out
+	L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
 
 	page_queue_item* page = second_chance_select(&active_pages_head);
 	assert(page != NULL && !is_referenced(page));
@@ -152,7 +171,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	dprintf(0, "second chance selected page: thread:0x%X vaddr:0x%X for swap\n", page->tid, page->virtual_address);
 
 	if(is_dirty(page)) {
-		dprintf(0, "selected page is dirty, need to write to swap space");
+		dprintf(0, "selected page is dirty, need to write to swap space\n");
 		page->to_swap = PAGESIZE;
 		page->initiator = initiator;
 
@@ -177,7 +196,7 @@ int swap_out(L4_ThreadId_t initiator) {
 
 	}
 	else {
-		// not dirty, just mark page as swapped and we're done
+		dprintf(0, "not dirty, just mark page as swapped and we're done\n");
 	}
 
 	return 0;

@@ -18,7 +18,7 @@
 
 #include "frames.h"
 
-#define verbose 0
+#define verbose 1
 
 #define BITS_PER_CHAR 8
 
@@ -175,6 +175,9 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	}
 
 	dprintf(2, "Stack count now is: %d\n", stack_count);
+
+	stack_count = 10;
+	dprintf(0, "WARNING: running with artificially decreased frame number: %d\n", stack_count);
 
 }
 

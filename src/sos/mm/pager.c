@@ -69,6 +69,10 @@ for(int i=0; i<4096; i++) {
 
 #define verbose 3
 
+#define MAPPING_SUCCESS 0
+#define MAPPING_FAILED 1
+#define OUT_OF_FRAMES 2
+
 // Virtual address space layout constants
 #define ONE_MEGABYTE (1024*1024)
 #define VIRTUAL_START 0x2000000
@@ -228,9 +232,9 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  *
  * @param tid ID of thread to map for
  * @param addr memory area to map (aligned to multiple of PAGESIZE)
- * @return	0 iff Mapping failed
- *			1 iff Mapping success
- *			2 iff no more free frames (swapping started)
+ * @return	MAPPING_FAILED iff Mapping failed
+ *			MAPPING_SUCCESS iff Mapping success
+ *			OUT_OF_FRAMES iff no more free frames (swapping started)
  */
 static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 
@@ -245,7 +249,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 
 		if((second_entry->address = (void*) frame_alloc()) == NULL) {
 			swap_out(tid);
-			return 2;
+			return OUT_OF_FRAMES;
 		}
 
 		// align address to be multiple of pagesize
@@ -279,7 +283,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
  * @param tid the faulting thread id
  * @param msgP pointer to the page fault message
  */
-void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
+int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 {
 	assert( ((short) L4_Label(msgP->tag) >> 4) ==  L4_PAGEFAULT); // make sure pager is only called in page fault context
 
@@ -307,9 +311,19 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	else {
 
 		// perform a 2 level page table lookup
-		if (!virtual_mapping(tid, addr)) {
-			sos_print_error(L4_ErrorCode());
-			dprintf(0, "Can't map page at %lx. Either MapFpage failed or we're out of memory.\n", addr);
+		int ret = virtual_mapping(tid, addr);
+		switch(ret) {
+			case MAPPING_FAILED:
+				sos_print_error(L4_ErrorCode());
+				dprintf(0, "Can't map page at %lx. Either MapFpage failed or we're out of memory.\n", addr);
+			break;
+
+			case OUT_OF_FRAMES:
+				// we're swapping and we have stopped the thread so don't send a reply (yet)
+				// the thread will be started again once swapping is completed
+				// (see swap_write_callback)
+				return 0;
+			break;
 		}
 
 	}
@@ -317,6 +331,7 @@ void pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	// Generate Reply message
 	L4_Set_MsgMsgTag(msgP, L4_Niltag);
 	L4_MsgLoad(msgP);
+	return 1; // send the reply
 }
 
 
@@ -392,4 +407,13 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 
 	return second_entry->address;
+}
+
+
+page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
+	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	if(first_entry->address == NULL)
+		return NULL;
+
+	return second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 }

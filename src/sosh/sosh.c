@@ -233,7 +233,7 @@ static int wait(int argc, char **argv) {
 }
 
 
-#define NPAGES 128
+#define NPAGES 40
 static int thrash(int argc, char **argv) {
 
     char* space = malloc(NPAGES * 1024);
@@ -247,7 +247,7 @@ static int thrash(int argc, char **argv) {
     	space[i * 1024] = i;
 
     // unmap pages
-    sos_debug_flush();
+    //sos_debug_flush();
 
     // verify
     for(int i = 0; i < NPAGES; i += 4)
