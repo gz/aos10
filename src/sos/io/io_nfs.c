@@ -68,21 +68,26 @@ static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr
 static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh, fattr_t* attr) {
 	file_info* fi = (file_info*) token;
 
-	if(status == NFS_OK) {
-		int mode = fi->status.st_fmode;
-		nfs_set_status((int)fi, NFS_OK, fh, attr);
+	switch(status) {
+		case NFS_OK:
+		{
+			int mode = fi->status.st_fmode;
+			nfs_set_status((int)fi, NFS_OK, fh, attr);
 
-		if(!L4_IsNilThread(fi->reader))
-			open_nfs(fi, fi->reader, mode);
+			if(!L4_IsNilThread(fi->reader))
+				open_nfs(fi, fi->reader, mode);
+		}
+		break;
+
+		default:
+			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+
+			if(!L4_IsNilThread(fi->reader))
+				send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
+		break;
 	}
-	else {
-		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
 
-		if(!L4_IsNilThread(fi->reader))
-			send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
-	}
-
-	fi->reader = L4_nilthread; // hack to know who requested this file
+	fi->reader = L4_nilthread; // undo hack to know who requested this file
 }
 
 
@@ -127,14 +132,19 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
 
 	file_table_entry* f = (file_table_entry*) token;
 
-	if(status == NFS_OK) {
-		f->read_position += bytes_read;
-		memcpy(f->client_buffer, data, bytes_read);
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, bytes_read);
-	}
-	else {
-		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-		send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, -1);
+	switch(status) {
+
+		case NFS_OK:
+			f->read_position += bytes_read;
+			memcpy(f->client_buffer, data, bytes_read);
+			send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, bytes_read);
+		break;
+
+		default:
+			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+			send_ipc_reply(f->owner, CREATE_SYSCALL_NR(SOS_READ), 1, -1);
+		break;
+
 	}
 
 }
@@ -157,23 +167,31 @@ void read_nfs(file_table_entry* f) {
 static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 	file_table_entry* f = (file_table_entry*) token;
+	switch(status) {
 
-	if(status == NFS_OK) {
-		int new_size = attr->size;
-		f->write_position += f->to_write;
+		case NFS_OK:
+		{
+			int new_size = attr->size;
+			f->write_position += f->to_write;
 
-		// update file attributes
-		f->file->status.st_size = new_size;
-		f->file->status.st_atime = attr->atime.useconds / 1000;
+			// update file attributes
+			f->file->status.st_size = new_size;
+			f->file->status.st_atime = attr->atime.useconds / 1000;
 
-		send_ipc_reply(f->owner, SOS_WRITE, 1, f->to_write);
-	}
-	else if(status == NFSERR_NOSPC) {
-		send_ipc_reply(f->owner, SOS_WRITE, 1, 0); // no more space left on device, assume we could not write anything
-	}
-	else {
-		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
-		send_ipc_reply(f->owner, SOS_WRITE, 1, -1);
+			send_ipc_reply(f->owner, SOS_WRITE, 1, f->to_write);
+		}
+		break;
+
+		case NFSERR_NOSPC:
+			// no more space left on device, assume we could not write anything
+			send_ipc_reply(f->owner, SOS_WRITE, 1, 0);
+		break;
+
+		default:
+			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+			send_ipc_reply(f->owner, SOS_WRITE, 1, -1);
+		break;
+
 	}
 
 }
