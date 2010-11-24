@@ -233,7 +233,7 @@ static int wait(int argc, char **argv) {
 }
 
 
-#define NPAGES 40
+#define NPAGES 10
 #define NUMINTPERPAGE (1<<10)
 static int thrash(int argc, char **argv) {
 

@@ -79,12 +79,12 @@ void frame_test4(void) {
 		*frame = 0x37;
 		assert(*frame == 0x37);
 		printf("Frame #%d allocated at %p\n",  i, frame);
-		print_bitfield(0, 10);
+		//print_bitfield(0, 10);
 	}
 
 	for(i=0; i< 10; i++) {
 		frame_free((L4_Word_t)frame);
 		frame = (L4_Word_t*) (((L4_Word_t) frame) - 4096);
-		print_bitfield(0, 10);
+		//print_bitfield(0, 10);
 	}
 }

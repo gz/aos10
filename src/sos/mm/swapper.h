@@ -17,13 +17,18 @@ typedef struct pit {
 	L4_ThreadId_t initiator;	/**< Used by swap out (this thread is restarted after we finished swapping out) */
 } page_queue_item;
 
+TAILQ_HEAD(pages_head, pit);
+extern struct pages_head active_pages_head;
+
 /** File descriptor Index for swap file in root process filetable */
 #define SWAP_FD 1
 
 // Return values for swap out
 #define SWAPPING_PENDING -1
 #define SWAPPING_COMPLETE -2
+#define OUT_OF_SWAP_SPACE -3
 
+void swap_init(void);
 int swap_out(L4_ThreadId_t);
 int swap_in(page_queue_item*);
 

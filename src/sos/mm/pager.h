@@ -11,8 +11,6 @@ typedef struct page_entry {
 	void* address;
 } page_table_entry;
 
-TAILQ_HEAD(pages_head, pit);
-extern struct pages_head active_pages_head;
 
 void pager_init(void);
 int pager(L4_ThreadId_t, L4_Msg_t*);

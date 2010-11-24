@@ -21,6 +21,8 @@
 
 #define verbose 1
 
+/** Reduces the number of frames to 10 */
+#define SWAP_TEST 1
 #define BITS_PER_CHAR 8
 
 /** List elements used to maintain a list of the free frames */
@@ -119,8 +121,8 @@ static int bitfield_get(L4_Word_t frame) {
  *
  * @param first where to start printing in the bitfield
  * @param number_of_bits #bits printed beginning from first
- */
-void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
+ *//*
+static void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
 	dprintf(0, "Printing Bitfield from %d to %d:\n", first, first+number_of_bits-1);
 	int i;
 	for(i=0; i<number_of_bits; i++) {
@@ -128,7 +130,7 @@ void print_bitfield(L4_Word_t first, L4_Word_t number_of_bits) {
 		if((i+1) % 10 == 0)
 			dprintf(0, "\n");
 	}
-}
+}*/
 
 /**
  * Initialize the frame table.
@@ -177,9 +179,10 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 
 	dprintf(2, "Stack count now is: %d\n", stack_count);
 
+	#ifdef SWAP_TEST
 	stack_count = 10;
 	dprintf(0, "WARNING: running with artificially decreased frame number: %d\n", stack_count);
-
+	#endif
 }
 
 

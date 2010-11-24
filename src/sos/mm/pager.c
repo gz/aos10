@@ -102,7 +102,6 @@ for(int i=0; i<4096; i++) {
 
 // Global datastructures for pager
 static page_table_entry* first_level_table = NULL;
-struct pages_head active_pages_head;
 
 
 /**
@@ -231,11 +230,9 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
 void pager_init() {
 	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok (for now) TODO
 	assert(first_level_table != NULL);
-
 	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
 
-
-	TAILQ_INIT(&active_pages_head);
+	swap_init();
 }
 
 
@@ -280,6 +277,10 @@ static void* allocate_new_frame(L4_ThreadId_t for_thread) {
 				// without requiring any IO
 				new_frame = (void*)frame_alloc();
 				assert(new_frame != NULL);
+			break;
+
+			case OUT_OF_SWAP_SPACE:
+				L4_KDB_Enter("Out of memory and swap space :-(\n");
 			break;
 
 			default:

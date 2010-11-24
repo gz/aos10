@@ -33,6 +33,10 @@
  * the offset were the page is located in the swap file.
  * A page is marked as dirty in the pagetable if the second bit is set.
  *
+ * Swap File Layout
+ * ------------------------------
+ * TODO
+ *
  **/
 
 #include <assert.h>
@@ -43,6 +47,7 @@
 #include "../libsos.h"
 #include "../process.h"
 #include "../io/io.h"
+#include "../datastructures/bitfield.h"
 #include "swapper.h"
 #include "frames.h"
 
@@ -50,9 +55,11 @@
 
 /** Amount of bytes read/written from/to swap file per call */
 #define BATCH_SIZE 512
+/** Maximum number of entries the swap file can hold (note this should be a multiple of 8 for the bitfield) */
+#define MAX_SWAP_ENTRIES 5000
+static data_ptr bitfield;
 
-/** This variable multiplied by PAGESIZE gives the next free area in our swap file */
-static int swap_entries = 0;
+struct pages_head active_pages_head;
 
 
 /**
@@ -216,69 +223,6 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 
 /**
- * This function will select a page (based on second chance)
- * and swap it out to file system. However if the selected page
- * was not dirty then we just need to mark it swapped again and
- * can return immediatly.
- * We stop the initiator thread as long as we're swapping
- * data out to the file system. The thread is restarted in the
- * write callback function (above).
- *
- * @param initiator ID of the thread who caused the swapping to happen
- * @return	SWAPPING_PENDING in case we need to write the page to the disk
- * 			SWAPPING_COMPLETE in case the page was not dirty
- */
-int swap_out(L4_ThreadId_t initiator) {
-	page_queue_item* page = second_chance_select(&active_pages_head);
-	assert(page != NULL && !is_referenced(page));
-
-	// decide where in the swap file our page will be
-	page->swap_offset = (page->swap_offset >= 0) ? page->swap_offset : (swap_entries++ * PAGESIZE);
-
-	dprintf(0, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X\n", page->tid, page->virtual_address);
-
-	if(is_dirty(page)) {
-		dprintf(1, "Selected page is dirty, need to write to swap space\n");
-		L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
-
-		page->to_swap = PAGESIZE;
-		page->initiator = initiator;
-
-		file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
-		assert(swap_fd != NULL);
-
-		data_ptr physical_page = pager_physical_lookup(page->tid, page->virtual_address);
-		assert(physical_page != NULL);
-
-		// write page in swap file
-		assert(PAGESIZE % BATCH_SIZE == 0);
-		for(int write_offset=0; write_offset < page->to_swap; write_offset += BATCH_SIZE) {
-			nfs_write(
-				&swap_fd->file->nfs_handle,
-				page->swap_offset + write_offset,
-				BATCH_SIZE,
-				physical_page + write_offset,
-				&swap_write_callback,
-				(int)page
-			);
-		}
-
-		return SWAPPING_PENDING;
-	}
-	else {
-		assert(page->swap_offset >= 0);
-		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
-		frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
-		mark_swapped(pte, page->swap_offset);
-		free(page);
-
-		return SWAPPING_COMPLETE;
-	}
-
-}
-
-
-/**
  * Read Callback for the NFS library if we're reading a page back into memory.
  * Again we split the NFS calls up and always read BATCH_SIZE bytes per call.
  * Note that once the page is competely swapped in it is inserted back into
@@ -322,6 +266,100 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 			// We could probably try to restart swapping here but since it failed before
 			// we don't see much point in this.
 		break;
+	}
+
+}
+
+
+static int allocate_swap_entry(void) {
+
+	for(int i=0; i<MAX_SWAP_ENTRIES; i++) {
+
+		if(!bitfield_get(bitfield, i)) {
+			bitfield_set(bitfield, i, 1);
+			return i*PAGESIZE;
+		}
+	}
+
+	return -1;
+}
+
+
+/**
+ * Initializes datastructures required for swapping.
+ * This is called by pager_init.
+ */
+void swap_init() {
+	TAILQ_INIT(&active_pages_head);
+
+	// initialize the bitfield for the swap file
+	bitfield = malloc(MAX_SWAP_ENTRIES / 8);
+	for(int i=0; i < MAX_SWAP_ENTRIES; i++) {
+		bitfield_set(bitfield, i, 0);
+	}
+}
+
+
+/**
+ * This function will select a page (based on second chance)
+ * and swap it out to file system. However if the selected page
+ * was not dirty then we just need to mark it swapped again and
+ * can return immediatly.
+ * We stop the initiator thread as long as we're swapping
+ * data out to the file system. The thread is restarted in the
+ * write callback function (above).
+ *
+ * @param initiator ID of the thread who caused the swapping to happen
+ * @return	SWAPPING_PENDING in case we need to write the page to the disk
+ * 			SWAPPING_COMPLETE in case the page was not dirty
+ * 			OUT_OF_SWAP_SPACE if our swap space is already full
+ */
+int swap_out(L4_ThreadId_t initiator) {
+	page_queue_item* page = second_chance_select(&active_pages_head);
+	assert(page != NULL && !is_referenced(page));
+
+	// decide where in the swap file our page will be
+	if(page->swap_offset < 0 && (page->swap_offset = allocate_swap_entry()) < 0)
+		return OUT_OF_SWAP_SPACE;
+
+	dprintf(0, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X swap_offset:0x%X\n", page->tid, page->virtual_address, page->swap_offset);
+
+	if(is_dirty(page)) {
+		dprintf(1, "Selected page is dirty, need to write to swap space\n");
+		L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
+
+		page->to_swap = PAGESIZE;
+		page->initiator = initiator;
+
+		file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
+		assert(swap_fd != NULL);
+
+		data_ptr physical_page = pager_physical_lookup(page->tid, page->virtual_address);
+		assert(physical_page != NULL);
+
+		// write page in swap file
+		assert(PAGESIZE % BATCH_SIZE == 0);
+		for(int write_offset=0; write_offset < page->to_swap; write_offset += BATCH_SIZE) {
+			nfs_write(
+				&swap_fd->file->nfs_handle,
+				page->swap_offset + write_offset,
+				BATCH_SIZE,
+				physical_page + write_offset,
+				&swap_write_callback,
+				(int)page
+			);
+		}
+
+		return SWAPPING_PENDING;
+	}
+	else {
+		assert(page->swap_offset >= 0);
+		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
+		frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
+		mark_swapped(pte, page->swap_offset);
+		free(page);
+
+		return SWAPPING_COMPLETE;
 	}
 
 }
