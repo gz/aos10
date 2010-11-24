@@ -38,24 +38,29 @@ static void nfs_set_status(uintptr_t token, int status, struct cookie* fh, fattr
 
 	fi->nfs_handle = *fh; // copy the file handle
 
-	if(status == NFS_OK) {
-		stat->st_size = attr->size;
-		stat->st_atime = attr->atime.useconds / 1000;
-		stat->st_ctime = attr->ctime.useconds / 1000;
-		stat->st_type = ST_FILE;
+	switch(status) {
 
-		stat->st_fmode = 0; // reset because create_nfs stores information here
-		if(attr->mode & 0000400)
-			stat->st_fmode |= FM_READ;
-		if(attr->mode & 0000200)
-			stat->st_fmode |= FM_WRITE;
-		if(attr->mode & 0000100)
-			stat->st_fmode |= FM_EXEC;
+		case NFS_OK:
+			stat->st_size = attr->size;
+			stat->st_atime = attr->atime.useconds / 1000;
+			stat->st_ctime = attr->ctime.useconds / 1000;
+			stat->st_type = ST_FILE;
 
-		file_cache_insert(fi);
-	}
-	else {
-		dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+			stat->st_fmode = 0; // reset because create_nfs stores information here
+			if(attr->mode & 0000400)
+				stat->st_fmode |= FM_READ;
+			if(attr->mode & 0000200)
+				stat->st_fmode |= FM_WRITE;
+			if(attr->mode & 0000100)
+				stat->st_fmode |= FM_EXEC;
+
+			file_cache_insert(fi);
+		break;
+
+		default:
+			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
+		break;
+
 	}
 
 }
