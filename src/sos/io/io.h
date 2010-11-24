@@ -12,43 +12,45 @@ struct finfo;
 
 /** Information we track for files in the file system (NFS and device files). */
 typedef struct finfo {
-	char filename[MAX_PATH_LENGTH]; /**< Buffer for the name of the file */
+	char filename[MAX_PATH_LENGTH];					/**< Buffer for the name of the file */
 	stat_t status;
 
 	L4_ThreadId_t reader;							/**< for special files: thread who has read access*/
 	struct serial* serial_handle;					/**< serial handler (only used for special files) */
-	circular_buffer* cbuffer;
+	circular_buffer* cbuffer;						/**< circular buffer (used for serial files) */
 
-	struct cookie nfs_handle;
+	struct cookie nfs_handle;						/**< handle used by NFS to identify the file */
 
 	void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t );
 	void (*write) (struct fentry*);					/**< write function called for this file */
 	void (*read)  (struct fentry*);					/**< read function called for this file  */
 	void (*close) (struct fentry*);					/**< close function called for this file */
 
-	void (*write_callback)(uintptr_t, int, fattr_t*);
-	void (*read_callback)(uintptr_t, int, fattr_t*, int , char*);
-
 } file_info;
 
+#define DIR_CACHE_SIZE 0x100
+extern file_info* file_cache[DIR_CACHE_SIZE];	/**< used to store all file information */
 
-/** Information we track for open files. */
+
+/**
+ * Information we track for open files.
+ * These entries are stored in the process descriptor
+ * (see process.h).
+ **/
 typedef struct fentry {
-	file_info* file;
-	L4_ThreadId_t owner;
-	fmode_t mode;
+	file_info* file;			/**< pointer to the corresponding file_info */
+	L4_ThreadId_t owner;		/**< owner of this file table entry */
+	fmode_t mode;				/**< mode in which the file was opened */
 
 	data_ptr client_buffer;		/**< pointer to user space memory location where we should write the data on read */
 	L4_Word_t to_read;			/**< number of bytes to read (set by syscall read()) */
 	L4_Word_t to_write;			/**< number of bytes to write (set by syscall write()) */
 
-	L4_Word_t write_position;
-	L4_Word_t read_position;
+	L4_Word_t write_position;	/**< current write position in file (to handle multiple write calls) */
+	L4_Word_t read_position;	/**< current read position in file (to handle multiple read calls) */
 
 } file_table_entry;
 
-#define DIR_CACHE_SIZE 0x100
-extern file_info* file_cache[DIR_CACHE_SIZE];
 
 void io_init(void);
 int open_file(L4_ThreadId_t, L4_Msg_t*, data_ptr);

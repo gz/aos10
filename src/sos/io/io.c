@@ -133,6 +133,11 @@ fildes_t find_free_file_slot(file_table_entry** file_table) {
 	return -1;
 }
 
+
+/**
+ * Creates a file descriptor with given arguments.
+ * @return file_table_entry struct
+ */
 file_table_entry* create_file_descriptor(file_info* fi, L4_ThreadId_t tid, fmode_t mode) {
 
 	file_table_entry* fte = malloc(sizeof(file_table_entry)); // freed on close()
@@ -189,8 +194,6 @@ void io_init() {
 	// initialize swap file
 	file_info* swap_file = create_nfs("swap", L4_nilthread, 0);
 	// overwrite callbacks for swap file (because of different behaviour than standard io)
-	swap_file->read_callback = &swap_read_callback;
-	swap_file->write_callback = &swap_write_callback;
 
 	// initialize file handle for swap file
 	get_process(root_thread_g)->filetable[SWAP_FD] = create_file_descriptor(swap_file, root_thread_g, FM_READ | FM_WRITE);

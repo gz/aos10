@@ -104,6 +104,7 @@ for(int i=0; i<4096; i++) {
 static page_table_entry* first_level_table = NULL;
 struct pages_head active_pages_head;
 
+
 /**
  * Gets access rights for a given thread at a certain memory location.
  *
@@ -193,15 +194,24 @@ static void create_second_level_table(page_table_entry* first_level_entry) {
 	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
 }
 
+
+/**
+ * Marks a page as dirty in the page table.
+ * @param pte page table entry pointer
+ */
 static void mark_dirty(page_table_entry* pte) {
 	assert(pte != NULL);
-	//assert(!IS_SWAPPED((L4_Word_t)pte->address)); // marking swapped page dirty would not make sense
+	assert(!IS_SWAPPED((L4_Word_t)pte->address)); // marking swapped page dirty would not make sense
 
 	L4_Word_t current = (L4_Word_t) pte->address;
 	pte->address = (void*) (current | 0x2);
 }
 
 
+/**
+ * Allocates a page_queue_item and initializes it with the arguments given.
+ * @return pointer to the page_queue_item
+ */
 static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr, int swap_offset) {
 	page_queue_item* p = malloc(sizeof(page_queue_item)); // freed by swap out or (TODO) process delete
 	assert(p != NULL);
@@ -213,9 +223,10 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
 	return p;
 }
 
+
 /**
- * Initializes 1st level page table structure by allocating it on the heap. Initially all entries are set to 0.
- *
+ * Initializes 1st level page table structure by allocating it on the heap.
+ * Initially all entries are set to 0.
  */
 void pager_init() {
 	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok (for now) TODO
@@ -249,6 +260,14 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t
 }
 
 
+/**
+ * Allocates a new frame for a given thread.
+ * In case we run out of free frame this method initiates
+ * the swapping.
+ * @param for_thread Thread ID which requested a frame
+ * @return NULL in case no frame can be returned yet
+ * valid pointer to a frame otherwise.
+ */
 static void* allocate_new_frame(L4_ThreadId_t for_thread) {
 
 	void* new_frame = NULL;
@@ -347,6 +366,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
+
 /**
  * Method called by the SOS Server whenever a page fault occurs.
  *
@@ -416,7 +436,6 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
  * System call handler
  * This function unmaps all fpages for a given thread mapped to physical
  * memory by the pager. And flushes the CPU Cache.
- *
  */
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
@@ -475,6 +494,12 @@ void pager_free_all(L4_ThreadId_t tid) {
 }
 
 
+/**
+ * Returns the corresponding physical address (or swap offset)
+ * of a given virtual address.
+ * @param tid Thread ID of the process
+ * @param addr virtual address we want to look up
+ */
 void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 
 	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
@@ -487,6 +512,12 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 }
 
 
+/**
+ * Returns the page table entry for a given virtual address.
+ * @param tid thread ID defining which pagetable
+ * @param addr virtual address
+ * @return pointer to the page table entry
+ */
 page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL)

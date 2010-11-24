@@ -145,7 +145,7 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
  * a given file.
  */
 void read_nfs(file_table_entry* f) {
-	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, f->file->read_callback, (int)f);
+	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, &nfs_read_callback, (int)f);
 }
 
 
@@ -198,9 +198,7 @@ file_info* create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
 	fi->serial_handle = NULL;
 	fi->open = &open_nfs;
 	fi->read = &read_nfs;
-	fi->read_callback = &nfs_read_callback;
 	fi->write = &write_nfs;
-	fi->write_callback = &nfs_write_callback;
 	fi->close = NULL;
 
 	fi->status.st_fmode = mode; // we abuse this field to know in which mode the client wants to open the file
@@ -222,7 +220,7 @@ file_info* create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
  * Tell NFS to write to a given file.
  */
 void write_nfs(file_table_entry* f) {
-	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, f->file->write_callback, (int)f);
+	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, &nfs_write_callback, (int)f);
 }
 
 
@@ -255,9 +253,7 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 				fi->serial_handle = NULL;
 				fi->open = &open_nfs;
 				fi->read = &read_nfs;
-				fi->read_callback = &nfs_read_callback;
 				fi->write = &write_nfs;
-				fi->write_callback = &nfs_write_callback;
 				fi->close = NULL;
 				fi->reader = L4_anythread;
 
