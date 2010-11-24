@@ -99,7 +99,6 @@ for(int i=0; i<4096; i++) {
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
-#define SWAP_OFFSET(addr) ((addr) & ~0xFFF)
 
 // Global datastructures for pager
 static page_table_entry* first_level_table = NULL;
@@ -194,6 +193,14 @@ static void create_second_level_table(page_table_entry* first_level_entry) {
 	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
 }
 
+static void mark_dirty(page_table_entry* pte) {
+	assert(pte != NULL);
+	//assert(!IS_SWAPPED((L4_Word_t)pte->address)); // marking swapped page dirty would not make sense
+
+	L4_Word_t current = (L4_Word_t) pte->address;
+	pte->address = (void*) (current | 0x2);
+}
+
 
 static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr, int swap_offset) {
 	page_queue_item* p = malloc(sizeof(page_queue_item)); // freed by swap out or (TODO) process delete
@@ -211,7 +218,7 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
  *
  */
 void pager_init() {
-	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok
+	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok (for now) TODO
 	assert(first_level_table != NULL);
 
 	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
@@ -226,9 +233,10 @@ void pager_init() {
  *
  * @param tid ID of the thread to map for
  * @param addr memory location to map
- * @return Returns 0/1 based on success/failure of MapFpage syscall
+ * @return 	MAPPING_FAILED iff Mapping failed
+ * 			MAPPING_SUCCESS iff Mappfing success
  */
-static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
+static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requested_access) {
 
 	// Construct fpage IPC message
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12);
@@ -241,17 +249,50 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 }
 
 
+static void* allocate_new_frame(L4_ThreadId_t for_thread) {
+
+	void* new_frame = NULL;
+	if((new_frame = (void*)frame_alloc()) == NULL) {
+
+		switch(swap_out(for_thread)) {
+
+			case SWAPPING_COMPLETE:
+				// non dirty pages can be swapped and free'd
+				// without requiring any IO
+				new_frame = (void*)frame_alloc();
+				assert(new_frame != NULL);
+			break;
+
+			default:
+				// We need to wait until the page
+				// is written to the disk
+			break;
+
+		}
+
+	}
+
+	return new_frame;
+}
+
+
 /**
  * Does a 2 Level Pagetable Lookup to map the virtual address space into
- * physical.
+ * physical. In addition swapping in and/or swapping out is initialized
+ * if we run out of physical memory or a requested page is currently
+ * swapped out. Newly mapped pages are inserted into the active
+ * pages queue (used by swapper.c).
  *
  * @param tid ID of thread to map for
  * @param addr memory area to map (aligned to multiple of PAGESIZE)
  * @return	MAPPING_FAILED iff Mapping failed
  *			MAPPING_SUCCESS iff Mapping success
  *			OUT_OF_FRAMES iff no more free frames (swapping started)
+ *			PAGE_NOT_AVAILABLE iff the page needs to be swapped in
  */
-static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
+static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requested_access) {
+	assert(is_access_granted(tid, addr, requested_access));
+
 	// align address to be multiple of pagesize
 	addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
 
@@ -266,25 +307,25 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 	// Page referenced for the first time
 	if(second_entry->address == NULL) {
 
-		if((second_entry->address = (void*) frame_alloc()) == NULL) {
-			swap_out(tid);
+		if( (second_entry->address = allocate_new_frame(tid)) == NULL ) {
 			return OUT_OF_FRAMES;
 		}
 
 		// insert page into queue of active pages
 		page_queue_item* p = create_page_queue_item(tid, addr, -1);
 		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
+		// new allocated pages are always dirty
+		mark_dirty(second_entry);
 
 		dprintf(2, "New allocated physical frame: %X\n", (int) second_entry->address);
 	}
+
 	// Page is currently swapped out
 	else if(IS_SWAPPED((L4_Word_t)second_entry->address)) {
-		dprintf(3, "We need to swap in.\n");
-		L4_Word_t swap_offset = SWAP_OFFSET((L4_Word_t)second_entry->address);
+		L4_Word_t swap_offset = CLEAR_LOWER_BITS((L4_Word_t)second_entry->address);
 
 		void* new_frame = NULL;
-		if((new_frame = (void*)frame_alloc()) == NULL) {
-			swap_out(tid);
+		if( (new_frame = allocate_new_frame(tid)) == NULL ) {
 			return OUT_OF_FRAMES;
 		}
 
@@ -293,13 +334,16 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr) {
 		swap_in(p);
 		return PAGE_NOT_AVAILABLE;
 	}
+
+	if(requested_access & L4_Writable)
+		mark_dirty(second_entry);
+
 	// else page just isn't mapped in hardware
-
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
-	L4_Set_Rights(&targetFpage, get_access_rights(tid, addr));
-	L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t) second_entry->address, L4_DefaultMemory);
+	L4_Set_Rights(&targetFpage, requested_access);
+	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS((L4_Word_t)second_entry->address), L4_DefaultMemory);
 
-	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, (int)second_entry->address);
+	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS((L4_Word_t)second_entry->address));
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
@@ -328,7 +372,7 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	if(addr < VIRTUAL_START) {
 
 		// For addresses below VIRTUAL_START we just do 1 to 1 mapping of addresses
-		if (!one_to_one_mapping(tid, addr)) {
+		if (!one_to_one_mapping(tid, addr, fault_reason)) {
 			sos_print_error(L4_ErrorCode());
 			dprintf(0, "Can't map page at %lx\n", addr);
 		}
@@ -337,7 +381,7 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	else {
 
 		// perform a 2 level page table lookup
-		int ret = virtual_mapping(tid, addr);
+		int ret = virtual_mapping(tid, addr, fault_reason);
 		switch(ret) {
 			case MAPPING_FAILED:
 				sos_print_error(L4_ErrorCode());
@@ -439,7 +483,7 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 
 	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
 
-	return second_entry->address;
+	return (void*)CLEAR_LOWER_BITS((L4_Word_t)second_entry->address);
 }
 
 

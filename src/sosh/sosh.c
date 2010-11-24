@@ -263,25 +263,6 @@ static int thrash(int argc, char **argv) {
 		free(chunks[i]);
 	}
 
-//    char* space = malloc(NPAGES * 1024);
-//    assert(space);
-//
-//    // check that we are not in physical memory
-//    assert((void *) space > (void *) 0x2000000);
-//
-//    // set heap memory
-//    for(int i = 0; i < NPAGES; i += 4)
-//    	space[i * 1024] = i;
-//
-//    // unmap pages
-//    //sos_debug_flush();
-//
-//    // verify
-//    for(int i = 0; i < NPAGES; i += 4)
-//    	assert(space[i*1024] == i);
-//
-//    free(space);
-
     return 0;
 }
 

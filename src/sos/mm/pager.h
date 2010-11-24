@@ -21,5 +21,6 @@ void pager_free_all(L4_ThreadId_t);
 void* pager_physical_lookup(L4_ThreadId_t, L4_Word_t addr);
 page_table_entry* pager_table_lookup(L4_ThreadId_t, L4_Word_t);
 
+#define CLEAR_LOWER_BITS(addr) ((addr) & ~0xFFF)
 
 #endif /* PAGER_H_ */

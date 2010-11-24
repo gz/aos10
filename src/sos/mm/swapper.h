@@ -21,8 +21,12 @@ typedef struct pit {
 /** File descriptor Index for swap file in root process filetable */
 #define SWAP_FD 1
 
-void swap_out(L4_ThreadId_t);
-void swap_in(page_queue_item*);
+// Return values for swap out
+#define SWAPPING_PENDING -1
+#define SWAPPING_COMPLETE -2
+
+int swap_out(L4_ThreadId_t);
+int swap_in(page_queue_item*);
 void swap_write_callback(uintptr_t, int, fattr_t*);
 void swap_read_callback(uintptr_t, int, fattr_t*, int, char*);
 

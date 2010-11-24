@@ -19,16 +19,12 @@ static int swap_entries = 0;
 
 
 static L4_Bool_t is_dirty(page_queue_item* page) {
-	/*L4_Fpage_t fpage = L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2);
-	L4_PhysDesc_t phys;
+	assert(page != NULL);
 
-	if(L4_GetStatus(page->tid, &fpage, &phys) == FALSE) {
-		dprintf(0, "Can't get status for page 0x%X (error:%d)\n", page->virtual_address, L4_ErrorCode());
-	}
+	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
+	assert(pte != NULL);
 
-	return L4_WasWritten(fpage);*/
-
-	return TRUE;
+	return (L4_Word_t)pte->address & 0x2;
 }
 
 static L4_Bool_t is_referenced(page_queue_item* page) {
@@ -104,7 +100,7 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			if(page->to_swap == 0) {
 
 				dprintf(0, "page is swapped out\n");
-				frame_free((L4_Word_t) pte->address);
+				frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
 				mark_swapped(pte, page->swap_offset);
 
 				// restart the thread who ran out of memory
@@ -122,11 +118,13 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 		case NFSERR_NOSPC:
 			dprintf(0, "System ran out of memory _and_ swap space (this is bad).\n");
+			free(page);
 			assert(FALSE);
 		break;
 
 		default:
 			dprintf(0, "%s: Bad NFS status (%d) from callback.\n", __FUNCTION__, status);
+			free(page);
 			assert(FALSE);
 			// We could probably try to restart swapping here but since it failed before
 			// we don't see much point in this.
@@ -136,9 +134,7 @@ void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 }
 
 
-void swap_out(L4_ThreadId_t initiator) {
-	L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
-
+int swap_out(L4_ThreadId_t initiator) {
 	page_queue_item* page = second_chance_select(&active_pages_head);
 	assert(page != NULL && !is_referenced(page));
 
@@ -149,6 +145,8 @@ void swap_out(L4_ThreadId_t initiator) {
 
 	if(is_dirty(page)) {
 		dprintf(0, "selected page is dirty, need to write to swap space\n");
+		L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
+
 		page->to_swap = PAGESIZE;
 		page->initiator = initiator;
 
@@ -171,10 +169,19 @@ void swap_out(L4_ThreadId_t initiator) {
 			);
 		}
 
+		return SWAPPING_PENDING;
 	}
 	else {
-		dprintf(0, "TODO: not dirty, just mark page as swapped and we're done\n");
+		assert(page->swap_offset >= 0);
+		dprintf(0, "swapping NOT dirty page\n");
+		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
+		frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
+		mark_swapped(pte, page->swap_offset);
+		free(page);
+
+		return SWAPPING_COMPLETE;
 	}
+
 }
 
 
@@ -217,7 +224,7 @@ void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int bytes_re
 
 }
 
-void swap_in(page_queue_item* page) {
+int swap_in(page_queue_item* page) {
 	assert(page != NULL);
 	L4_AbortIpc_and_stop_Thread(page->tid); // stop the client thread since he has to wait until we finished swapping in
 
@@ -226,4 +233,6 @@ void swap_in(page_queue_item* page) {
 
 	page->to_swap = 0; // to keep track of how many bytes are read
 	nfs_read(&swap_fd->file->nfs_handle, page->swap_offset+page->to_swap, BATCH_SIZE, swap_fd->file->read_callback, (int)page);
+
+	return SWAPPING_PENDING;
 }
