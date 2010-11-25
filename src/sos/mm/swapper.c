@@ -35,7 +35,12 @@
  *
  * Swap File Layout
  * ------------------------------
- * TODO
+ * The swap file contains the swapped out pages. Page are one after another
+ * in the file (each page is 4096 bytes large). The entries of a swap file
+ * are tracked using a bitfield. The maximum size of the swap file is
+ * controlled by MAX_SWAP_ENTRIES. As a default value this is set to
+ * 5000. So this means we can swap out MAX_SWAP_ENTRIES pages which limits
+ * the maximum size of the swap file to PAGESIZE*MAX_SWAP_ENTRIES.
  *
  **/
 
@@ -269,6 +274,7 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 	}
 
 }
+
 
 /**
  * Finds an empty place in the swap file.
