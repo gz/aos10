@@ -270,7 +270,12 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 
 }
 
-
+/**
+ * Finds an empty place in the swap file.
+ *
+ * @return Start offset of free space in swap file or -1 if
+ * swap is full.
+ */
 static int allocate_swap_entry(void) {
 
 	for(int i=0; i<MAX_SWAP_ENTRIES; i++) {
