@@ -232,6 +232,18 @@ void pager_init() {
 	assert(first_level_table != NULL);
 	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
 
+	// TOOO fix for multiple processes
+	// make sure our shared memory always has a page allocated
+	// we do this by not placing this frame in the queue
+	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
+	if(first_entry->address == NULL)
+		create_second_level_table(first_entry);
+
+	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
+	second_entry->address = (void*)frame_alloc();
+	assert(second_entry->address != NULL);
+	dprintf(0, "allocated shared memory to frame: %p\n", second_entry->address);
+
 	swap_init();
 }
 
