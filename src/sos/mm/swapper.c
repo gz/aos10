@@ -62,7 +62,7 @@
 #define BATCH_SIZE 512
 /** Maximum number of entries the swap file can hold (note this should be a multiple of 8 for the bitfield) */
 #define MAX_SWAP_ENTRIES 5000
-static data_ptr bitfield;
+data_ptr swap_bitfield;
 
 struct pages_head active_pages_head;
 
@@ -78,7 +78,7 @@ static L4_Bool_t is_dirty(page_queue_item* page) {
 	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
 	assert(pte != NULL);
 
-	return (L4_Word_t)pte->address & 0x2;
+	return (L4_Word_t)pte->address_ptr & 0x2;
 }
 
 
@@ -162,7 +162,7 @@ static void mark_swapped(page_table_entry* pte, int swap_location) {
 	assert(swap_location % PAGESIZE == 0);
 	assert(pte != NULL);
 
-	pte->address = (void*)(swap_location | 0x1);
+	pte->address = (swap_location | 0x1);
 }
 
 
@@ -193,7 +193,7 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			if(page->to_swap == 0) {
 
 				dprintf(0, "page is swapped out\n");
-				frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
+				frame_free(CLEAR_LOWER_BITS(pte->address));
 				mark_swapped(pte, page->swap_offset);
 
 				// restart the thread who ran out of memory
@@ -248,7 +248,7 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 		{
 			assert(bytes_read == BATCH_SIZE);
 
-			memcpy( ((char*)pte->address)+page->to_swap, data, bytes_read);
+			memcpy( ((char*)pte->address_ptr)+page->to_swap, data, bytes_read);
 			page->to_swap += bytes_read;
 
 			// swapping in complete
@@ -286,8 +286,8 @@ static int allocate_swap_entry(void) {
 
 	for(int i=0; i<MAX_SWAP_ENTRIES; i++) {
 
-		if(!bitfield_get(bitfield, i)) {
-			bitfield_set(bitfield, i, 1);
+		if(!bitfield_get(swap_bitfield, i)) {
+			bitfield_set(swap_bitfield, i, 1);
 			return i*PAGESIZE;
 		}
 	}
@@ -304,9 +304,9 @@ void swap_init() {
 	TAILQ_INIT(&active_pages_head);
 
 	// initialize the bitfield for the swap file
-	bitfield = malloc(MAX_SWAP_ENTRIES / 8);
+	swap_bitfield = malloc(MAX_SWAP_ENTRIES / 8);
 	for(int i=0; i < MAX_SWAP_ENTRIES; i++) {
-		bitfield_set(bitfield, i, 0);
+		bitfield_set(swap_bitfield, i, 0);
 	}
 }
 
@@ -366,7 +366,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	else {
 		assert(page->swap_offset >= 0);
 		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
-		frame_free(CLEAR_LOWER_BITS((L4_Word_t)pte->address));
+		frame_free(CLEAR_LOWER_BITS(pte->address));
 		mark_swapped(pte, page->swap_offset);
 		free(page);
 

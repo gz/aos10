@@ -67,6 +67,7 @@ for(int i=0; i<4096; i++) {
 #include "frames.h"
 #include "../process.h"
 #include "../libsos.h"
+#include "../datastructures/bitfield.h"
 
 #define verbose 3
 
@@ -78,7 +79,7 @@ for(int i=0; i<4096; i++) {
 
 #define FIRST_LEVEL_INDEX(addr)  ( (((addr) & 0xFFF00000) >> 20) & 0xFFF )
 #define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
-#define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
+#define CREATE_VIRTUAL_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
 
@@ -167,12 +168,12 @@ static page_table_entry* second_level_lookup(page_table_entry* second_level_tabl
  * @param first_level_entry
  */
 static void create_second_level_table(page_table_entry* first_level_entry) {
-	assert(first_level_entry->address == NULL);
+	assert(first_level_entry->address_ptr == NULL);
 
-	first_level_entry->address = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
-	assert(first_level_entry->address != NULL);
+	first_level_entry->address_ptr = malloc(SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
+	assert(first_level_entry->address_ptr != NULL);
 
-	memset(first_level_entry->address, 0, SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
+	memset(first_level_entry->address_ptr, 0, SECOND_LEVEL_ENTRIES * sizeof(page_table_entry));
 }
 
 
@@ -182,10 +183,10 @@ static void create_second_level_table(page_table_entry* first_level_entry) {
  */
 static void mark_dirty(page_table_entry* pte) {
 	assert(pte != NULL);
-	assert(!IS_SWAPPED((L4_Word_t)pte->address)); // marking swapped page dirty would not make sense
+	assert(!IS_SWAPPED((L4_Word_t)pte->address_ptr)); // marking swapped page dirty would not make sense
 
-	L4_Word_t current = (L4_Word_t) pte->address;
-	pte->address = (void*) (current | 0x2);
+	L4_Word_t current = (L4_Word_t) pte->address_ptr;
+	pte->address = (current | 0x2);
 }
 
 
@@ -257,16 +258,16 @@ static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t
  */
 static void* allocate_new_frame(L4_ThreadId_t for_thread) {
 
-	void* new_frame = NULL;
-	if((new_frame = (void*)frame_alloc()) == NULL) {
+	L4_Word_t new_frame = 0;
+	if((new_frame = frame_alloc()) == 0) {
 
 		switch(swap_out(for_thread)) {
 
 			case SWAPPING_COMPLETE:
 				// non dirty pages can be swapped and free'd
 				// without requiring any IO
-				new_frame = (void*)frame_alloc();
-				assert(new_frame != NULL);
+				new_frame = frame_alloc();
+				assert(new_frame != 0);
 			break;
 
 			case OUT_OF_SWAP_SPACE:
@@ -282,7 +283,7 @@ static void* allocate_new_frame(L4_ThreadId_t for_thread) {
 
 	}
 
-	return new_frame;
+	return (void*) new_frame;
 }
 
 
@@ -307,17 +308,17 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
 
 	page_table_entry* first_entry = first_level_lookup(tid, FIRST_LEVEL_INDEX(addr));
-	if(first_entry->address == NULL) {
+	if(first_entry->address_ptr == NULL) {
 		dprintf(3, "No 2nd Level table exists here. Create one.\n");
 		create_second_level_table(first_entry); // set up new 2nd level page table
 	}
 
-	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+	page_table_entry* second_entry = second_level_lookup(first_entry->address_ptr, SECOND_LEVEL_INDEX(addr));
 
 	// Page referenced for the first time
-	if(second_entry->address == NULL) {
+	if(second_entry->address_ptr == NULL) {
 
-		if( (second_entry->address = allocate_new_frame(tid)) == NULL ) {
+		if( (second_entry->address_ptr = allocate_new_frame(tid)) == NULL ) {
 			return OUT_OF_FRAMES;
 		}
 
@@ -327,19 +328,19 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 		// new allocated pages are always dirty
 		mark_dirty(second_entry);
 
-		dprintf(2, "New allocated physical frame: %X\n", (int) second_entry->address);
+		dprintf(2, "New allocated physical frame: %X\n", second_entry->address);
 	}
 
 	// Page is currently swapped out
-	else if(IS_SWAPPED((L4_Word_t)second_entry->address)) {
-		L4_Word_t swap_offset = CLEAR_LOWER_BITS((L4_Word_t)second_entry->address);
+	else if(IS_SWAPPED(second_entry->address)) {
+		L4_Word_t swap_offset = CLEAR_LOWER_BITS(second_entry->address);
 
 		void* new_frame = NULL;
 		if( (new_frame = allocate_new_frame(tid)) == NULL ) {
 			return OUT_OF_FRAMES;
 		}
 
-		second_entry->address = new_frame;
+		second_entry->address_ptr = new_frame;
 		page_queue_item* p = create_page_queue_item(tid, addr, swap_offset);
 		swap_in(p);
 		return PAGE_NOT_AVAILABLE;
@@ -351,9 +352,9 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// else page just isn't mapped in hardware
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, requested_access);
-	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS((L4_Word_t)second_entry->address), L4_DefaultMemory);
+	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_DefaultMemory);
 
-	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS((L4_Word_t)second_entry->address));
+	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS(second_entry->address));
 	return L4_MapFpage(tid, targetFpage, phys);
 }
 
@@ -426,26 +427,31 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 /**
  * System call handler
  * This function unmaps all fpages for a given thread mapped to physical
- * memory by the pager. And flushes the CPU Cache.
+ * memory by the pager and flushes the CPU Cache.
  */
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
-	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
+	for(int i=0; i < FIRST_LEVEL_ENTRIES; i++) {
+		void* second_level_table = first_level_lookup(tid, i)->address_ptr;
 
-		void* second_level_table = first_level_lookup(tid, i)->address;
 		if(second_level_table != NULL) {
 
-			for(int j=0; j<SECOND_LEVEL_ENTRIES; j++) {
-				if(second_level_lookup(second_level_table, j)->address != NULL) {
+			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
 
-					L4_Word_t addr = CREATE_ADDRESS(i,j);
-					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, addr);
+				page_table_entry* pte = second_level_lookup(second_level_table, j);
 
-					if(L4_UnmapFpage(tid, L4_FpageLog2(addr, PAGESIZE_LOG2)) == 0) {
+				if(pte->address_ptr != NULL && !IS_SWAPPED(pte->address)) {
+
+					L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
+					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, virtual_address);
+
+					if(L4_UnmapFpage(tid, L4_FpageLog2(virtual_address, PAGESIZE_LOG2)) == 0) {
 						sos_print_error(L4_ErrorCode());
-						dprintf(0, "Can't unmap page at %lx\n", addr);
+						dprintf(0, "Can't unmap page at %lx\n", virtual_address);
 					} // else success
+
 				} // else no 2nd level entry here
+
 			}
 
 		} // else no 1st level entry here
@@ -461,23 +467,41 @@ int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 /**
  * Frees the allocated space for the page table for a given thread.
- * This should be called after a thread is finished.
+ * In addition this frees all queue items currently in the active
+ * pages queue for a given process and frees the allocated swap space
+ * of the process.
+ * This should be called after a thread has finished executing.
  *
  * @param tid thread id
  */
 void pager_free_all(L4_ThreadId_t tid) {
 
+	// free allocated 2nd level pagetables and free currently swapped out entries in swap file
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
 
-		void* second_level_table = first_level_lookup(tid, i)->address;
+		void* second_level_table = first_level_lookup(tid, i)->address_ptr;
 		if(second_level_table != NULL) {
+
+			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
+				page_table_entry* pte = second_level_lookup(second_level_table, j);
+				if(IS_SWAPPED(pte->address))
+					bitfield_set(swap_bitfield, CLEAR_LOWER_BITS(pte->address) % PAGESIZE, 0);
+				else
+					frame_free(CLEAR_LOWER_BITS(pte->address));
+
+				pte->address_ptr = NULL;
+			}
+
 			free(second_level_table);
+			second_level_table = NULL;
 		}
 
 	}
-	//TODO: free(first_level_table);
 
-	L4_CacheFlushAll();
+	// free page queue items and remove them from active queue, also free their
+	// corresponding swap space (if available)
+	// TODO
+
 }
 
 
@@ -492,9 +516,9 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 	if(first_entry == NULL)
 		return NULL;
 
-	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+	page_table_entry* second_entry = second_level_lookup(first_entry->address_ptr, SECOND_LEVEL_INDEX(addr));
 
-	return (void*)CLEAR_LOWER_BITS((L4_Word_t)second_entry->address);
+	return (void*)CLEAR_LOWER_BITS((L4_Word_t)second_entry->address_ptr);
 }
 
 
@@ -506,8 +530,8 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
  */
 page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 	page_table_entry* first_entry = first_level_lookup(tid, FIRST_LEVEL_INDEX(addr));
-	if(first_entry->address == NULL)
+	if(first_entry->address_ptr == NULL)
 		return NULL;
 
-	return second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
+	return second_level_lookup(first_entry->address_ptr, SECOND_LEVEL_INDEX(addr));
 }

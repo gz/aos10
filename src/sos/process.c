@@ -37,6 +37,10 @@ inline pid_t tid2pid(L4_ThreadId_t tid) {
 	return L4_ThreadNo(tid);
 }
 
+static inline L4_ThreadId_t pid2tid(pid_t pid) {
+	return L4_GlobalId(pid, 1);
+}
+
 process* get_process(L4_ThreadId_t tid) {
 
 	// find process with matching tid in list
@@ -87,16 +91,19 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
-	//pid_t pid = L4_MsgWord(msg_p, 0);
+	pid_t pid = L4_MsgWord(msg_p, 0);
+	process* to_delete = get_process(pid2tid(pid)); // TODO pid to tid
 
 	// unmap all pages
-	// free frames
-	// free all pager queue items
-	// free in bitmap for prev. swapped pages
+	pager_unmap_all(to_delete->tid, NULL, NULL);
+	pager_free_all(to_delete->tid); // free frames and page table memory
+
 	// close all files
 	// free file handlers
-	// free process structure
+
 	// stop (delete?) thread
+	// TODO remove from process list
+	free(to_delete); // free process structure
 
 	return IPC_SET_ERROR(-1);
 }
@@ -129,7 +136,7 @@ void register_process(L4_ThreadId_t tid) {
 
 	// initialize page index (first level page table)
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++)
-		new_process->page_index[i] = NULL;
+		new_process->page_index[i].address_ptr = 0;
 
 
 	LIST_INSERT_HEAD(&process_head, new_process, entries);
