@@ -8,7 +8,10 @@
 
 /** List element used in the first level page table */
 typedef struct page_entry {
-	void* address;
+	union {
+		L4_Word_t address;
+		void* address_ptr;
+	};
 } page_table_entry;
 
 // Virtual address space layout constants
