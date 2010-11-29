@@ -47,7 +47,25 @@ static void init_thread(void)
 	network_init();
 	io_init();
 
-	create_process(L4_nilthread, NULL, "sosh"); // starting console
+	/*
+    // Loop through the BootInfo starting executables
+    int i;
+    L4_Word_t task = 0;
+    L4_BootRec_t *binfo_rec;
+    for (i = 1; (binfo_rec = sos_get_binfo_rec(i)); i++) {
+		if (L4_BootRec_Type(binfo_rec) != L4_BootInfo_SimpleExec)
+			continue;
+
+		// Must be a SimpleExec boot info record
+		dprintf(0, "Found exec: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
+
+		// Start a new task with this program
+		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0xC0000000);
+		register_process(newtid);
+
+		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
+    }*/
+	create_process(L4_nilthread, NULL, "sosh");
 
     // Thread finished - block forever
     for (;;)
@@ -124,9 +142,8 @@ static __inline__ void syscall_loop(void)
 			// Handle System calls
 			case 0 ... SYSENT_SIZE-1:
 			{
-				data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
-
 				if(sysent[sysnr] != NULL) {
+					data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
 					reply = sysent[sysnr](tid, &msg, ipc_memory);
 				}
 				else {

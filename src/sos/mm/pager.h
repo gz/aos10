@@ -11,6 +11,24 @@ typedef struct page_entry {
 	void* address;
 } page_table_entry;
 
+// Virtual address space layout constants
+#define ONE_MEGABYTE (1024*1024)
+#define VIRTUAL_START 0x2000000
+
+#define STACK_TOP 0xC0000000
+#define STACK_END (STACK_TOP - ONE_MEGABYTE)
+
+#define IPC_START 0x60000000
+#define IPC_END (IPC_START + 4096)
+
+#define HEAP_START 0x40000000
+#define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
+
+// Page table manipulation macros and constants
+#define FIRST_LEVEL_BITS 12
+#define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
+#define SECOND_LEVEL_BITS 8
+#define SECOND_LEVEL_ENTRIES (1 << SECOND_LEVEL_BITS)
 
 void pager_init(void);
 int pager(L4_ThreadId_t, L4_Msg_t*);

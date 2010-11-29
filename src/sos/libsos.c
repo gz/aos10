@@ -29,6 +29,7 @@
 #include <clock.h>
 
 #include "libsos.h"
+#include "process.h"
 
 // Globals accessable everywhere
 L4_ThreadId_t root_thread_g;
@@ -300,6 +301,8 @@ L4_ThreadId_t sos_task_new(L4_Word_t task, L4_ThreadId_t pager,
 
 	// Create an inactive thread
 	L4_ThreadId_t tid = L4_GlobalId(taskId, 1);
+	register_process(tid);
+
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);
 	if (!res)

@@ -63,15 +63,16 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		// Start a new task with this program
 		L4_ThreadId_t newtid = sos_task_new(
 				++task,
-				L4_Pager(),
+				root_thread_g,
 				(void *) L4_SimpleExec_TextVstart(boot_record),
 				(void *) 0xC0000000
 		);
-		register_process(newtid); //  TODO should be called before task starts :-S
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
 
-		if(!L4_IsNilThread(tid))
+		if(!L4_IsNilThread(tid)) {
+			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));
 			return set_ipc_reply(msg_p, 1, tid2pid(newtid));
+		}
 	}
 
 	if(!L4_IsNilThread(tid))
@@ -106,7 +107,10 @@ void register_process(L4_ThreadId_t tid) {
 	process* new_process = malloc(sizeof(process)); // TODO free on process delete
 	assert(new_process != NULL);
 
+	// initialize process data
 	new_process->tid = tid;
+	new_process->size = 1; // 1 because we count the shared page for syscalls
+	new_process->start_time = time_stamp();
 
 	// set up file table with default NULL values
 	for(int i=0; i<PROCESS_MAX_FILES; i++) {
@@ -115,15 +119,18 @@ void register_process(L4_ThreadId_t tid) {
 
 	// initialize standard out file descriptor for our 1st process
 	file_table_entry** file_table = new_process->filetable;
-
 	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close() OR TODO process delete
 	assert(file_table[0] != NULL);
-
 	file_table[0]->file = file_cache[0];
 	file_table[0]->mode = FM_WRITE;
 	file_table[0]->owner = tid;
 	file_table[0]->to_read = 0;
 	file_table[0]->client_buffer = NULL;
+
+	// initialize page index (first level page table)
+	new_process->pagetable = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // free on process delete
+	assert(new_process->pagetable != NULL);
+	memset(new_process->pagetable, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
 
 	LIST_INSERT_HEAD(&process_head, new_process, entries);
 }

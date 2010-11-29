@@ -54,9 +54,11 @@ void sos_debug_flush(void) {
 
 
 void abort(void) {
-	L4_KDB_Enter("sos abort()ed");
 	while(1); /* We don't return after this */
 }
 
 
-void _Exit(int status) { abort(); }
+void _Exit(int status) {
+	process_delete(my_id());
+	abort();
+}

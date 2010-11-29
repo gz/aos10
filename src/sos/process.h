@@ -4,6 +4,7 @@
 #include <sos_shared.h>
 #include <l4/types.h>
 #include <l4/message.h>
+#include <clock.h>
 
 #include "queue.h"
 #include "io/io.h"
@@ -13,12 +14,14 @@ typedef struct proc {
 	LIST_ENTRY(proc) entries;
 
 	L4_ThreadId_t tid;
+
+	L4_Word_t  size;
+	timestamp_t  start_time;
+
 	file_table_entry* filetable[PROCESS_MAX_FILES];
 	page_table_entry* pagetable;
 
 } process;
-
-process* current_process;
 
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);

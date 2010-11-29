@@ -8,7 +8,9 @@ int main(void) {
 	printf("Hello World\n");
 	printf("I'm test_io\n");
 
-	char* buf = malloc(4096);
+	/*char* buf = malloc(4096);
+	assert(buf != NULL);*/
+	char buf[4096];
 
 	int fd = open("swap", O_RDONLY);
 	assert(fd != -1);

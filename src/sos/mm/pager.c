@@ -65,6 +65,7 @@ for(int i=0; i<4096; i++) {
 #include "pager.h"
 #include "swapper.h"
 #include "frames.h"
+#include "../process.h"
 #include "../libsos.h"
 
 #define verbose 3
@@ -75,33 +76,11 @@ for(int i=0; i<4096; i++) {
 #define OUT_OF_FRAMES 2
 #define PAGE_NOT_AVAILABLE 3
 
-// Virtual address space layout constants
-#define ONE_MEGABYTE (1024*1024)
-#define VIRTUAL_START 0x2000000
-
-#define STACK_TOP 0xC0000000
-#define STACK_END (STACK_TOP - ONE_MEGABYTE)
-
-#define IPC_START 0x60000000
-#define IPC_END (IPC_START + 4096)
-
-#define HEAP_START 0x40000000
-#define HEAP_END (HEAP_START + (4 * ONE_MEGABYTE))
-
-// Page table manipulation macros and constants
-#define FIRST_LEVEL_BITS 12
-#define FIRST_LEVEL_ENTRIES (1 << FIRST_LEVEL_BITS)
-#define SECOND_LEVEL_BITS 8
-#define SECOND_LEVEL_ENTRIES (1 << SECOND_LEVEL_BITS)
-
 #define FIRST_LEVEL_INDEX(addr)  ( (((addr) & 0xFFF00000) >> 20) & 0xFFF )
 #define SECOND_LEVEL_INDEX(addr) (  ((addr) & 0x000FF000) >> 12 )
 #define CREATE_ADDRESS(first, second) ( ((first) << 20) | ((second) << 12) )
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
-
-// Global datastructures for pager
-static page_table_entry* first_level_table = NULL;
 
 
 /**
@@ -157,10 +136,14 @@ inline static L4_Bool_t is_access_granted(L4_ThreadId_t tid, L4_Word_t addr, L4_
  * @param index where to look at
  * @return page table entry at position `index`
  */
-static page_table_entry* first_level_lookup(L4_Word_t index) {
+static page_table_entry* first_level_lookup(L4_ThreadId_t tid, L4_Word_t index) {
 	assert(index >= 0 && index < FIRST_LEVEL_ENTRIES);
 
-	return first_level_table+index;
+	if(get_process(tid) == NULL)
+		return NULL;
+
+	assert(get_process(tid)->pagetable != NULL);
+	return get_process(tid)->pagetable+index;
 }
 
 
@@ -228,21 +211,17 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
  * Initially all entries are set to 0.
  */
 void pager_init() {
-	first_level_table = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // this is never freed but it's ok (for now) TODO
-	assert(first_level_table != NULL);
-	memset(first_level_table, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
-
 	// TOOO fix for multiple processes
 	// make sure our shared memory always has a page allocated
 	// we do this by not placing this frame in the queue
-	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
+	/*page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
 	if(first_entry->address == NULL)
 		create_second_level_table(first_entry);
 
 	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
 	second_entry->address = (void*)frame_alloc();
 	assert(second_entry->address != NULL);
-	dprintf(0, "allocated shared memory to frame: %p\n", second_entry->address);
+	dprintf(0, "allocated shared memory to frame: %p\n", second_entry->address);*/
 
 	swap_init();
 }
@@ -328,7 +307,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// align address to be multiple of pagesize
 	addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
 
-	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	page_table_entry* first_entry = first_level_lookup(tid, FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL) {
 		dprintf(3, "No 2nd Level table exists here. Create one.\n");
 		create_second_level_table(first_entry); // set up new 2nd level page table
@@ -452,11 +431,9 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
  */
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
-	// TODO: select first level table based on tid
-
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
 
-		void* second_level_table = first_level_lookup(i)->address;
+		void* second_level_table = first_level_lookup(tid, i)->address;
 		if(second_level_table != NULL) {
 
 			for(int j=0; j<SECOND_LEVEL_ENTRIES; j++) {
@@ -491,11 +468,9 @@ int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
  */
 void pager_free_all(L4_ThreadId_t tid) {
 
-	// TODO: select 1st level table based on tid
-
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
 
-		void* second_level_table = first_level_lookup(i)->address;
+		void* second_level_table = first_level_lookup(tid, i)->address;
 		if(second_level_table != NULL) {
 			free(second_level_table);
 		}
@@ -514,9 +489,8 @@ void pager_free_all(L4_ThreadId_t tid) {
  * @param addr virtual address we want to look up
  */
 void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
-
-	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
-	if(first_entry->address == NULL)
+	page_table_entry* first_entry = first_level_lookup(tid, FIRST_LEVEL_INDEX(addr));
+	if(first_entry == NULL)
 		return NULL;
 
 	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX(addr));
@@ -532,7 +506,7 @@ void* pager_physical_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
  * @return pointer to the page table entry
  */
 page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
-	page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX(addr));
+	page_table_entry* first_entry = first_level_lookup(tid, FIRST_LEVEL_INDEX(addr));
 	if(first_entry->address == NULL)
 		return NULL;
 
