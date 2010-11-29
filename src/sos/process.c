@@ -129,7 +129,7 @@ void register_process(L4_ThreadId_t tid) {
 
 	// initialize page index (first level page table)
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++)
-		new_process->page_index[i].address = 0;
+		new_process->page_index[i] = NULL;
 
 
 	LIST_INSERT_HEAD(&process_head, new_process, entries);
