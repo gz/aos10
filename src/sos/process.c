@@ -49,7 +49,7 @@ process* get_process(L4_ThreadId_t tid) {
 }
 
 int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	if(buf == NULL)
+	if(buf == NULL && !L4_IsNilThread(tid))
 		return IPC_SET_ERROR(-1);
 
 	// copy executable name, make sure it's a valid string
@@ -69,18 +69,24 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		);
 		register_process(newtid); //  TODO should be called before task starts :-S
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
-		return set_ipc_reply(msg_p, 1, tid2pid(newtid));
+
+		if(!L4_IsNilThread(tid))
+			return set_ipc_reply(msg_p, 1, tid2pid(newtid));
 	}
 
-	return IPC_SET_ERROR(-1); // executable not found
+	if(!L4_IsNilThread(tid))
+		return IPC_SET_ERROR(-1); // executable not found
+
+	return 0; // return if not called from syscall context
 }
 
 
 int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+
 	if(L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
-	pid_t pid = L4_MsgWord(msg_p, 0);
+	//pid_t pid = L4_MsgWord(msg_p, 0);
 
 	// unmap all pages
 	// free frames
@@ -90,6 +96,8 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	// free file handlers
 	// free process structure
 	// stop (delete?) thread
+
+	return IPC_SET_ERROR(-1);
 }
 
 

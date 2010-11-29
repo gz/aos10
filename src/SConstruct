@@ -48,30 +48,24 @@ rootserver_env.AddLibrary("sos_shared")
 rootserver_env.AddLibrary("clock")
 sos = rootserver_env.Application("sos");
 
-timer_syscall_milestone = 3
-
 # Use the app_env environment for building everything else that will run in the
 # userland context.  Can't add libs/sos 'cause it doesn't exist yet.
 app_env=env.Copy("userland", LINKFLAGS=["-r"])
 app_env.AddLibrary("l4")
 app_env.AddLibrary("c", system="sos")
 app_env.AddLibrary("elf")
-
-if milestone < timer_syscall_milestone:
-    app_name = "tty_test"
-else:
-    app_name = "sosh"
-    app_env.AddLibrary("sos_shared")
-    app_env.AddLibrary("sos")
+app_env.AddLibrary("sos_shared")
+app_env.AddLibrary("sos")
 
 # Once you get to the later milestones you will be writing lots of little test
 # tools that need to get loaded and run in your context.  Do that by calling
 # the Application function a number times in the app_env environment.
-app = app_env.Application(app_name)
+app1 = app_env.Application("sosh")
+app2 = app_env.Application("tests/io")
 
 # Bootimage takes a comma seperated list of Applications that are linked
 # together into a single bootimg.bin binary.
-bootimg = env.Bootimage(l4kernel, sos, app)
+bootimg = env.Bootimage(l4kernel, sos, app1, app2)
 
 Default(bootimg) # Default build target is the bootimage.
 
