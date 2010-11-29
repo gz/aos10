@@ -162,7 +162,7 @@ static void mark_swapped(page_table_entry* pte, int swap_location) {
 	assert(swap_location % PAGESIZE == 0);
 	assert(pte != NULL);
 
-	pte->address = (void*) (swap_location | 0x1);
+	pte->address = (void*)(swap_location | 0x1);
 }
 
 

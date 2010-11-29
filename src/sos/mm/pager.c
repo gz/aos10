@@ -142,8 +142,7 @@ static page_table_entry* first_level_lookup(L4_ThreadId_t tid, L4_Word_t index) 
 	if(get_process(tid) == NULL)
 		return NULL;
 
-	assert(get_process(tid)->pagetable != NULL);
-	return get_process(tid)->pagetable+index;
+	return get_process(tid)->page_index+index;
 }
 
 

@@ -128,9 +128,9 @@ void register_process(L4_ThreadId_t tid) {
 	file_table[0]->client_buffer = NULL;
 
 	// initialize page index (first level page table)
-	new_process->pagetable = malloc(FIRST_LEVEL_ENTRIES * sizeof(page_table_entry)); // free on process delete
-	assert(new_process->pagetable != NULL);
-	memset(new_process->pagetable, 0, FIRST_LEVEL_ENTRIES * sizeof(page_table_entry));
+	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++)
+		new_process->page_index[i].address = 0;
+
 
 	LIST_INSERT_HEAD(&process_head, new_process, entries);
 }
