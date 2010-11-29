@@ -19,7 +19,7 @@ typedef struct proc {
 	timestamp_t  start_time;
 
 	file_table_entry* filetable[PROCESS_MAX_FILES];
-	page_table_entry* page_index[FIRST_LEVEL_ENTRIES];
+	page_table_entry page_index[FIRST_LEVEL_ENTRIES];
 } process;
 
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
