@@ -20,9 +20,12 @@ typedef struct proc {
 
 process* current_process;
 
+int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+
 void process_init(void);
 process* get_process(L4_ThreadId_t tid);
-void create_process(L4_ThreadId_t tid);
+void register_process(L4_ThreadId_t tid);
 pid_t tid2pid(L4_ThreadId_t);
 
 #endif /* PROCESS_H_ */

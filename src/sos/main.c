@@ -60,7 +60,7 @@ static void init_thread(void)
 
 		// Start a new task with this program
 		L4_ThreadId_t newtid = sos_task_new(++task, L4_Pager(), (void *) L4_SimpleExec_TextVstart(binfo_rec), (void *) 0xC0000000);
-		create_process(newtid);
+		register_process(newtid);
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }
@@ -184,7 +184,7 @@ int main(void)
 
     // Initialize process structure and register root process
     process_init();
-    create_process(L4_Myself());
+    register_process(L4_Myself());
 
     // Spawn the setup thread which completes the rest of the initialization,
     // leaving this thread free to act as a pager and interrupt handler.

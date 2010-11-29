@@ -1,12 +1,18 @@
 #include <assert.h>
+#include <string.h>
 #include <sos.h>
 
 pid_t process_create(const char *path) {
+	assert(strlen(path) <= MAX_PATH_LENGTH);
+
+    strcpy((char*) ipc_memory_start, path);
+
     L4_Msg_t msg;
-	L4_MsgTag_t tag = system_call(SOS_PROCESS_CREATE, &msg, 0);
+    L4_MsgTag_t tag = system_call(SOS_PROCESS_CREATE, &msg, 0);
 	assert(L4_UntypedWords(tag) == 1);
 
-	return L4_MsgWord(&msg, 0);
+	pid_t pid = (pid_t) L4_MsgWord(&msg, 0);
+	return pid;
 }
 
 

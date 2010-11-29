@@ -34,6 +34,7 @@
 #include "sysent.h"
 #include "io/io.h"
 #include "mm/pager.h"
+#include "process.h"
 
 syscall_function_ptr sysent[SYSENT_SIZE] =  {
 		[0 ... 15] = NULL
@@ -54,6 +55,10 @@ void init_systable() {
 	register_syscall(SOS_GETDIRENT, &get_dirent);
 	register_syscall(SOS_SLEEP, &sleep_timer);
 	register_syscall(SOS_TIMESTAMP, &send_timestamp);
+
+	register_syscall(SOS_PROCESS_CREATE, &create_process);
+	register_syscall(SOS_PROCESS_DELETE, &delete_process);
+
 
 	register_syscall(SOS_UNMAP_ALL, &pager_unmap_all);
 }

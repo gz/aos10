@@ -1,13 +1,36 @@
 #include <assert.h>
+#include <string.h>
 #include "process.h"
 #include "libsos.h"
 
-#define verbose 1
+#define verbose 2
 
+static unsigned int task;
 static LIST_HEAD(listhead, proc) process_head;
+
+static L4_BootRec_t* find_boot_executable(const char* name) {
+
+	// Loop through the BootInfo starting executables
+    int i;
+    L4_BootRec_t* binfo_rec;
+    for (i = 1; (binfo_rec = sos_get_binfo_rec(i)); i++) {
+
+    	if (L4_BootRec_Type(binfo_rec) != L4_BootInfo_SimpleExec)
+			continue;
+
+    	if(strcmp(L4_SimpleExec_Cmdline(binfo_rec), name) == 0) {
+			dprintf(1, "Found executable for process create: %d %s\n", i, L4_SimpleExec_Cmdline(binfo_rec));
+    		return binfo_rec;
+    	}
+
+    }
+
+    return NULL;
+}
 
 void process_init() {
 	LIST_INIT(&process_head);
+	task = 0;
 }
 
 inline pid_t tid2pid(L4_ThreadId_t tid) {
@@ -25,8 +48,52 @@ process* get_process(L4_ThreadId_t tid) {
 	return NULL; // No process for given thread ID exists
 }
 
+int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	if(buf == NULL)
+		return IPC_SET_ERROR(-1);
 
-void create_process(L4_ThreadId_t tid) {
+	// copy executable name, make sure it's a valid string
+	char name[MAX_PATH_LENGTH+1];
+	memcpy(name, buf, MAX_PATH_LENGTH+1);
+	name[MAX_PATH_LENGTH] = '\0';
+
+	L4_BootRec_t* boot_record = find_boot_executable(name);
+
+	if(boot_record != NULL) {
+		// Start a new task with this program
+		L4_ThreadId_t newtid = sos_task_new(
+				++task,
+				L4_Pager(),
+				(void *) L4_SimpleExec_TextVstart(boot_record),
+				(void *) 0xC0000000
+		);
+		register_process(newtid); //  TODO should be called before task starts :-S
+		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
+		return set_ipc_reply(msg_p, 1, tid2pid(newtid));
+	}
+
+	return IPC_SET_ERROR(-1); // executable not found
+}
+
+
+int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	if(L4_UntypedWords(msg_p->tag) != 1)
+		return IPC_SET_ERROR(-1);
+
+	pid_t pid = L4_MsgWord(msg_p, 0);
+
+	// unmap all pages
+	// free frames
+	// free all pager queue items
+	// free in bitmap for prev. swapped pages
+	// close all files
+	// free file handlers
+	// free process structure
+	// stop (delete?) thread
+}
+
+
+void register_process(L4_ThreadId_t tid) {
 
 	process* new_process = malloc(sizeof(process)); // TODO free on process delete
 	assert(new_process != NULL);
