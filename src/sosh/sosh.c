@@ -203,7 +203,6 @@ static int uptime(int argc, char **argv) {
 		return 1;
 	}
 
-
 	uint64_t current = time_stamp();
 	int in_seconds = current / 1000000;
 
@@ -267,6 +266,24 @@ static int thrash(int argc, char **argv) {
 }
 
 
+static int kill_process(int argc, char **argv) {
+
+	if (argc != 2) {
+			printf("usage: %s <pid>\n", argv[0]);
+			return 1;
+	}
+	else {
+		pid_t pid = atoi(argv[1]);
+		pid_t ret = process_delete(pid);
+		assert(pid == ret);
+
+		return 0;
+	}
+
+}
+
+
+
 
 struct command {
 	char *name;
@@ -283,7 +300,8 @@ struct command commands[] = {
 		{ "uptime", uptime },
 		{ "wait", wait },
 		{ "benchmark", benchmark },
-		{ "thrash", thrash }
+		{ "thrash", thrash },
+		{ "kill", kill_process },
 };
 
 int main(void) {
