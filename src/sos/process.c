@@ -33,7 +33,7 @@ void process_init() {
 	task = 0;
 }
 
-inline pid_t tid2pid(L4_ThreadId_t tid) {
+static inline pid_t tid2pid(L4_ThreadId_t tid) {
 	return L4_ThreadNo(tid);
 }
 
