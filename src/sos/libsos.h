@@ -103,8 +103,7 @@ extern L4_ThreadId_t sos_get_new_tid(void);
 // priority.  A new thread is created and started with the given priority,
 // initial instruction point(entry) and a pointer to the top of a new stack. 
 //
-extern L4_ThreadId_t sos_thread_new_priority(L4_Word_t prio,
-					   void *entry, void *stack);
+extern L4_ThreadId_t sos_thread_new_priority(L4_Word_t prio, void *entry, void *stack);
 extern L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack);
 
 //
@@ -116,21 +115,8 @@ extern L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack);
 // variable is currently unused, but can be used by you to assign a thread id,
 // if you choose.  The pager variable will probably be root_thread_g.
 //
-extern L4_ThreadId_t sos_task_new(L4_Word_t task, char* name, L4_ThreadId_t pager,
-				  void *entrypoint, void *stack);
+extern L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack);
 
-#define THREADBITS 10
-//
-// sos_tid2task(L4_ThreadId_t tid)
-// 	returns L4_Word_t
-// 
-// Function that returns the task associated with the given thread id.  If the
-// thread is not a task then 0 is returned.
-//
-static inline L4_Word_t sos_tid2task(L4_ThreadId_t tid)
-{
-    return L4_ThreadNo(tid) >> THREADBITS;
-}
 
 //
 // sos_usleep(uint32_t microseconds)

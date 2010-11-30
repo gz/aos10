@@ -291,17 +291,10 @@ L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack) {
 }
 
 // Create and start a new task
-L4_ThreadId_t sos_task_new(L4_Word_t task, char* name, L4_ThreadId_t pager, void *entrypoint, void *stack) {
+L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack) {
 
-	// HACK: Workaround for compiler bug, volatile qualifier stops the internal
-	// compiler error.
-	volatile uint32_t taskId = task << THREADBITS;
 	int res;
-
 	// Create an inactive thread
-	L4_ThreadId_t tid = L4_GlobalId(taskId, 1);
-	register_process(tid, name);
-
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);
 	if (!res)

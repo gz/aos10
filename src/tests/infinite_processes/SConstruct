@@ -1,6 +1,6 @@
 Import("*")
 
 sources=Split("infinite_processes.c")
-obj = env.MyProgram("test_infproc", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+obj = env.MyProgram("tip", sources, LIBS=["c", "l4", "sos", "sos_shared"])
 
 Return("obj")

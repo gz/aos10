@@ -54,11 +54,11 @@ void sos_debug_flush(void) {
 
 
 void abort(void) {
-	process_delete(my_id());
 	while(1); /* We don't return after this */
 }
 
 
 void _Exit(int status) {
+	process_delete(my_id());
 	abort();
 }

@@ -5,6 +5,7 @@
 
 #define verbose 2
 
+#define RESERVED_ID_BITS 10
 static unsigned int task;
 static LIST_HEAD(listhead, proc) process_head;
 
@@ -30,12 +31,13 @@ static L4_BootRec_t* find_boot_executable(const char* name) {
 
 
 static inline pid_t tid2pid(L4_ThreadId_t tid) {
-	return L4_ThreadNo(tid);
+	return L4_ThreadNo(tid) >> RESERVED_ID_BITS;
 }
 
 
 static inline L4_ThreadId_t pid2tid(pid_t pid) {
-	return L4_GlobalId(pid, 1);
+	volatile int threadNo = pid << RESERVED_ID_BITS;
+	return L4_GlobalId(threadNo, 1);
 }
 
 
@@ -43,12 +45,19 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 	// find process with matching tid in list
 	for (process* p = process_head.lh_first; p != NULL; p = p->entries.le_next) {
-		if(L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread)) {
-			p->wait_for = L4_nilthread;
+		if(!L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
+			dprintf(0, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
 			send_ipc_reply(p->tid, SOS_PROCESS_WAIT, 1, tid2pid(finished_thread));
+			p->wait_for = L4_nilthread;
 		}
 	}
 
+}
+
+
+static L4_ThreadId_t new_process_id(void) {
+	volatile int threadNo = ++task << RESERVED_ID_BITS;
+	return L4_GlobalId(threadNo, 1);
 }
 
 void process_init() {
@@ -70,7 +79,7 @@ process* get_process(L4_ThreadId_t tid) {
 
 
 int get_pid(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	return set_ipc_reply(msg_p, 1, L4_ThreadNo(tid));
+	return set_ipc_reply(msg_p, 1, tid2pid(tid));
 }
 
 
@@ -123,9 +132,10 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(boot_record != NULL) {
 		// Start a new task with this program
-		L4_ThreadId_t newtid = sos_task_new(
-				++task,
-				name,
+		L4_ThreadId_t newtid = new_process_id();
+		register_process(newtid, name);
+		newtid = sos_task_new(
+				newtid,
 				root_thread_g,
 				(void *) L4_SimpleExec_TextVstart(boot_record),
 				(void *) 0xC0000000
@@ -151,6 +161,7 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
+	dprintf(0, "got pid to kill:%d\n", pid);
 	process* to_delete = get_process(pid2tid(pid));
 	if(to_delete == NULL)
 		return IPC_SET_ERROR(-1);
@@ -180,12 +191,14 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	// return to the thread only if he himself has not requested the delete
 	if(!L4_IsThreadEqual(tid, to_delete->tid)) {
 		free(to_delete);
-		return set_ipc_reply(msg_p, 1, 0);
+		return set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
 	}
 	else {
 		free(to_delete);
 		return 0;
 	}
+
+	return 0;
 }
 
 

@@ -275,8 +275,10 @@ static int kill_process(int argc, char **argv) {
 	else {
 		pid_t pid = atoi(argv[1]);
 		pid_t ret = process_delete(pid);
-		assert(pid == ret);
-
+		if(pid != ret) {
+			printf("Process not found or could not be killed.\n");
+			return -1;
+		}
 		return 0;
 	}
 
