@@ -33,6 +33,5 @@ int get_process_status(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 void process_init(void);
 process* get_process(L4_ThreadId_t tid);
 void register_process(L4_ThreadId_t tid, char* name);
-pid_t tid2pid(L4_ThreadId_t);
 
 #endif /* PROCESS_H_ */
