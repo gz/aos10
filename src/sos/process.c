@@ -98,35 +98,50 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
-	process* to_delete = get_process(pid2tid(pid)); // TODO pid to tid
+	process* to_delete = get_process(pid2tid(pid));
 	if(to_delete == NULL)
 		return IPC_SET_ERROR(-1);
 
 	dprintf(0, "deleting process: 0x%X\n", to_delete->tid);
 
 	pager_unmap_all(to_delete->tid, NULL, NULL); // remove mappings for this thread in L4
-	pager_free_all(to_delete->tid); // free frames and page table memory
+	pager_free_all(to_delete->tid); // free frames and pager memory
 
-	// close all files
-	// free file handlers
+	// close all files & free handlers
+	for(int i=0; i<PROCESS_MAX_FILES; i++) {
+		if(to_delete->filetable[i] != NULL) {
+			if(L4_IsThreadEqual(to_delete->filetable[i]->file->reader, to_delete->tid))
+				to_delete->filetable[i]->file->reader = L4_nilthread;
+
+			free(to_delete->filetable[i]);
+			to_delete->filetable[i] = NULL;
+		}
+	}
 
 	// stop (delete?) thread
-	// TODO remove from process list
-	free(to_delete); // free process structure
+	L4_AbortIpc_and_stop_Thread(to_delete->tid);
+	LIST_REMOVE(to_delete, entries);
 
-	L4_AbortIpc_and_stop(to_delete->tid);
-	return 0;
+	// return to the thread only if he himself has not requested the delete
+	if(!L4_IsThreadEqual(tid, to_delete->tid)) {
+		free(to_delete);
+		return set_ipc_reply(msg_p, 1, 0);
+	}
+	else {
+		free(to_delete);
+		return 0;
+	}
 }
 
 
 void register_process(L4_ThreadId_t tid) {
 
-	process* new_process = malloc(sizeof(process)); // TODO free on process delete
+	process* new_process = malloc(sizeof(process));
 	assert(new_process != NULL);
 
 	// initialize process data
 	new_process->tid = tid;
-	new_process->size = 1; // 1 because we count the shared page for syscalls
+	new_process->size = 1; // 1 because we count the shared page for syscalls TODO
 	new_process->start_time = time_stamp();
 
 	// set up file table with default NULL values
@@ -136,7 +151,7 @@ void register_process(L4_ThreadId_t tid) {
 
 	// initialize standard out file descriptor for our 1st process
 	file_table_entry** file_table = new_process->filetable;
-	file_table[0] = malloc(sizeof(file_table_entry)); // freed on close() OR TODO process delete
+	file_table[0] = malloc(sizeof(file_table_entry));
 	assert(file_table[0] != NULL);
 	file_table[0]->file = file_cache[0];
 	file_table[0]->mode = FM_WRITE;

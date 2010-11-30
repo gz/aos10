@@ -28,10 +28,9 @@ extern struct pages_head active_pages_head;
 #define SWAPPING_COMPLETE -2
 #define OUT_OF_SWAP_SPACE -3
 
+void swap_free(int);
 void swap_init(void);
 int swap_out(L4_ThreadId_t);
 int swap_in(page_queue_item*);
-
-extern data_ptr swap_bitfield;
 
 #endif /* SWAPPER_H_ */

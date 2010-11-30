@@ -62,7 +62,7 @@
 #define BATCH_SIZE 512
 /** Maximum number of entries the swap file can hold (note this should be a multiple of 8 for the bitfield) */
 #define MAX_SWAP_ENTRIES 5000
-data_ptr swap_bitfield;
+static data_ptr swap_bitfield;
 
 struct pages_head active_pages_head;
 
@@ -293,6 +293,21 @@ static int allocate_swap_entry(void) {
 	}
 
 	return -1;
+}
+
+
+/**
+ * Frees a swap entry at a given offset.
+ * @param offset
+ */
+void swap_free(int offset) {
+	assert(offset % PAGESIZE == 0);
+
+	int bit_number = offset / PAGESIZE;
+	assert(bit_number <= MAX_SWAP_ENTRIES);
+	assert(bitfield_get(swap_bitfield, bit_number));
+
+	bitfield_set(swap_bitfield, bit_number, 0);
 }
 
 

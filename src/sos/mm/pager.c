@@ -195,7 +195,7 @@ static void mark_dirty(page_table_entry* pte) {
  * @return pointer to the page_queue_item
  */
 static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr, int swap_offset) {
-	page_queue_item* p = malloc(sizeof(page_queue_item)); // freed by swap out or (TODO) process delete
+	page_queue_item* p = malloc(sizeof(page_queue_item));
 	assert(p != NULL);
 
 	p->tid = tid;
@@ -211,18 +211,6 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
  * Initially all entries are set to 0.
  */
 void pager_init() {
-	// TOOO fix for multiple processes
-	// make sure our shared memory always has a page allocated
-	// we do this by not placing this frame in the queue
-	/*page_table_entry* first_entry = first_level_lookup(FIRST_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
-	if(first_entry->address == NULL)
-		create_second_level_table(first_entry);
-
-	page_table_entry* second_entry = second_level_lookup(first_entry->address, SECOND_LEVEL_INDEX((L4_Word_t) ipc_memory_start));
-	second_entry->address = (void*)frame_alloc();
-	assert(second_entry->address != NULL);
-	dprintf(0, "allocated shared memory to frame: %p\n", second_entry->address);*/
-
 	swap_init();
 }
 
@@ -322,11 +310,14 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 			return OUT_OF_FRAMES;
 		}
 
-		// insert page into queue of active pages
-		page_queue_item* p = create_page_queue_item(tid, addr, -1);
-		TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
-		// new allocated pages are always dirty
-		mark_dirty(second_entry);
+		// shared ipc memory pages are never swapped out
+		if(addr != (L4_Word_t)ipc_memory_start) {
+			// insert page into queue of active pages
+			page_queue_item* p = create_page_queue_item(tid, addr, -1);
+			TAILQ_INSERT_TAIL(&active_pages_head, p, entries);
+			// new allocated pages are always dirty
+			mark_dirty(second_entry);
+		}
 
 		dprintf(2, "New allocated physical frame: %X\n", second_entry->address);
 	}
@@ -486,8 +477,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 				page_table_entry* pte = second_level_lookup(second_level_table, j);
 
 				if(IS_SWAPPED(pte->address)) {
-					// assert swap free
-					bitfield_set(swap_bitfield, CLEAR_LOWER_BITS(pte->address) % PAGESIZE, 0);
+					swap_free(CLEAR_LOWER_BITS(pte->address));
 				}
 
 				if(pte->address_ptr != NULL) {
@@ -506,11 +496,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 
 	// free page queue items and remove them from active queue, also free their
 	// corresponding swap space (if available)
-	// TODO
-	page_queue_item* page;
-
-	// do a second chance search for a page over all currently active pages
-    for(page = active_pages_head.tqh_first; page != NULL;) {
+    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL;) {
 
     	page_queue_item* next = page->entries.tqe_next;
 
@@ -519,7 +505,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 
     		TAILQ_REMOVE(&active_pages_head, page, entries);
     		if(page->swap_offset != -1)
-				bitfield_set(swap_bitfield, page->swap_offset % PAGESIZE, 0);
+				swap_free(page->swap_offset);
    			free(page);
     	}
 
