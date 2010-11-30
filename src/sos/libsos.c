@@ -291,8 +291,7 @@ L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack) {
 }
 
 // Create and start a new task
-L4_ThreadId_t sos_task_new(L4_Word_t task, L4_ThreadId_t pager,
-		void *entrypoint, void *stack) {
+L4_ThreadId_t sos_task_new(L4_Word_t task, char* name, L4_ThreadId_t pager, void *entrypoint, void *stack) {
 
 	// HACK: Workaround for compiler bug, volatile qualifier stops the internal
 	// compiler error.
@@ -301,28 +300,29 @@ L4_ThreadId_t sos_task_new(L4_Word_t task, L4_ThreadId_t pager,
 
 	// Create an inactive thread
 	L4_ThreadId_t tid = L4_GlobalId(taskId, 1);
-	register_process(tid);
+	register_process(tid, name);
 
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);
 	if (!res)
 		return ((L4_ThreadId_t) {raw : -1});
 
-				// Setup space
-				L4_Word_t dummy;
-				res = L4_SpaceControl(tid, 0, kip_fpage_s, utcb_fpage_s, &dummy);
-				if (!res)
-				return ((L4_ThreadId_t) {raw : -2});
+	// Setup space
+	L4_Word_t dummy;
+	res = L4_SpaceControl(tid, 0, kip_fpage_s, utcb_fpage_s, &dummy);
+	if (!res)
+	return ((L4_ThreadId_t) {raw : -2});
 
-				// Activate thread
-				res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) utcb_base_s);
-				if (!res)
-				return ((L4_ThreadId_t) {raw : -3});
+	// Activate thread
+	res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) utcb_base_s);
+	if (!res)
+	return ((L4_ThreadId_t) {raw : -3});
 
-				L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
+	L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
 
-				return tid;
-			}
+	return tid;
+}
+
 
 L4_BootRec_t *
 sos_get_binfo_rec(int index) {

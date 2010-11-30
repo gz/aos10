@@ -3,7 +3,7 @@
 #include <sos.h>
 
 pid_t process_create(const char *path) {
-	assert(strlen(path) <= MAX_PATH_LENGTH);
+	assert(strlen(path) < N_NAME);
 
     strcpy((char*) ipc_memory_start, path);
 
@@ -39,7 +39,16 @@ int process_status(process_t *processes, unsigned max) {
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_STATUS, &msg, 1, max);
 	assert(L4_UntypedWords(tag) == 1);
 
-	return 0;
+	unsigned int processes_returned = (unsigned int) L4_MsgWord(&msg, 0);
+	assert(processes_returned <= max);
+	process_t* processes_buffer = (process_t*) ipc_memory_start;
+
+	for(int i=0; i<processes_returned; i++) {
+		processes[i] = *processes_buffer++;
+	}
+
+
+	return processes_returned;
 }
 
 
