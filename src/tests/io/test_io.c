@@ -10,7 +10,7 @@ int main(void) {
 
 	/*char* buf = malloc(4096);
 	assert(buf != NULL);*/
-	char buf[4096];
+	/*char buf[4096];
 
 	int fd = open("swap", O_RDONLY);
 	assert(fd != -1);
@@ -23,5 +23,5 @@ int main(void) {
 		sleep(1000);
 	}
 
-	printf("test_io is done now...\n");
+	printf("test_io is done now...\n");*/
 }

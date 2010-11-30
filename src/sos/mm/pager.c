@@ -484,10 +484,16 @@ void pager_free_all(L4_ThreadId_t tid) {
 
 			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
 				page_table_entry* pte = second_level_lookup(second_level_table, j);
-				if(IS_SWAPPED(pte->address))
+
+				if(IS_SWAPPED(pte->address)) {
+					// assert swap free
 					bitfield_set(swap_bitfield, CLEAR_LOWER_BITS(pte->address) % PAGESIZE, 0);
-				else
+				}
+
+				if(pte->address_ptr != NULL) {
+					dprintf(0, "pager free frame:%d\n", pte->address);
 					frame_free(CLEAR_LOWER_BITS(pte->address));
+				}
 
 				pte->address_ptr = NULL;
 			}
@@ -501,6 +507,24 @@ void pager_free_all(L4_ThreadId_t tid) {
 	// free page queue items and remove them from active queue, also free their
 	// corresponding swap space (if available)
 	// TODO
+	page_queue_item* page;
+
+	// do a second chance search for a page over all currently active pages
+    for(page = active_pages_head.tqh_first; page != NULL;) {
+
+    	page_queue_item* next = page->entries.tqe_next;
+
+    	if(L4_IsThreadEqual(tid, page->tid)) {
+    		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
+
+    		TAILQ_REMOVE(&active_pages_head, page, entries);
+    		if(page->swap_offset != -1)
+				bitfield_set(swap_bitfield, page->swap_offset % PAGESIZE, 0);
+   			free(page);
+    	}
+
+    	page = next;
+    }
 
 }
 

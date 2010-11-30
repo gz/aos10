@@ -52,6 +52,12 @@ process* get_process(L4_ThreadId_t tid) {
 	return NULL; // No process for given thread ID exists
 }
 
+
+int get_pid(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	return set_ipc_reply(msg_p, 1, L4_ThreadNo(tid));
+}
+
+
 int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(buf == NULL && !L4_IsNilThread(tid))
 		return IPC_SET_ERROR(-1);
@@ -71,7 +77,7 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 				(void *) L4_SimpleExec_TextVstart(boot_record),
 				(void *) 0xC0000000
 		);
-		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
+		dprintf(0, "Created task: ox%X\n", newtid);
 
 		if(!L4_IsNilThread(tid)) {
 			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));
@@ -93,9 +99,12 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
 	process* to_delete = get_process(pid2tid(pid)); // TODO pid to tid
+	if(to_delete == NULL)
+		return IPC_SET_ERROR(-1);
 
-	// unmap all pages
-	pager_unmap_all(to_delete->tid, NULL, NULL);
+	dprintf(0, "deleting process: 0x%X\n", to_delete->tid);
+
+	pager_unmap_all(to_delete->tid, NULL, NULL); // remove mappings for this thread in L4
 	pager_free_all(to_delete->tid); // free frames and page table memory
 
 	// close all files
@@ -105,7 +114,8 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	// TODO remove from process list
 	free(to_delete); // free process structure
 
-	return IPC_SET_ERROR(-1);
+	L4_AbortIpc_and_stop(to_delete->tid);
+	return 0;
 }
 
 

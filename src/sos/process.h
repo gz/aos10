@@ -24,6 +24,7 @@ typedef struct proc {
 
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int get_pid(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
 void process_init(void);
 process* get_process(L4_ThreadId_t tid);
