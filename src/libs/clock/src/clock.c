@@ -278,6 +278,20 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
 
 
 /**
+ * Removes all currently registred timers for a given thread.
+ * @param tid
+ * @return
+ */
+/*void remove_timer(L4_ThreadId_t tid) {
+
+	L4_DeassociateInterrupt(timer0_irq_tid);
+	alarm_timer* old_head = timer_queue_head;
+
+	L4_AssociateInterrupt(timer0_irq_tid, root_thread_g);
+}*/
+
+
+/**
  * @return The microseconds since booting.
  */
 timestamp_t time_stamp(void) {

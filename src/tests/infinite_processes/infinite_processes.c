@@ -11,5 +11,5 @@
  **/
 int main(void) {
 	printf("Hello World\n");
-	process_create("test_infproc");
+	process_create("tip");
 }

@@ -6,12 +6,10 @@
 #include <l4/message.h>
 #include <clock.h>
 
-#include "queue.h"
 #include "io/io.h"
 #include "mm/pager.h"
 
 typedef struct proc {
-	LIST_ENTRY(proc) entries;
 	char command[N_NAME];
 
 	L4_ThreadId_t tid;

@@ -115,7 +115,7 @@ extern L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack);
 // variable is currently unused, but can be used by you to assign a thread id,
 // if you choose.  The pager variable will probably be root_thread_g.
 //
-extern L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack);
+extern L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack, L4_Word_t utcb_base);
 
 
 //

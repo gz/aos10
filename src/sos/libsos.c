@@ -291,25 +291,31 @@ L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack) {
 }
 
 // Create and start a new task
-L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack) {
+L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack, L4_Word_t utcb_base) {
 
 	int res;
 	// Create an inactive thread
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);
-	if (!res)
+	if (!res) {
+		dprintf(0, "Create an inactive thread failed. Error was: %d\n", L4_ErrorCode());
 		return ((L4_ThreadId_t) {raw : -1});
+	}
 
 	// Setup space
 	L4_Word_t dummy;
 	res = L4_SpaceControl(tid, 0, kip_fpage_s, utcb_fpage_s, &dummy);
-	if (!res)
-	return ((L4_ThreadId_t) {raw : -2});
+	if (!res) {
+		dprintf(0, "Setup space failed. Error was: %d\n", L4_ErrorCode());
+		return ((L4_ThreadId_t) {raw : -2});
+	}
 
 	// Activate thread
-	res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) utcb_base_s);
-	if (!res)
-	return ((L4_ThreadId_t) {raw : -3});
+	res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) utcb_base);
+	if (!res) {
+		dprintf(0, "Activate thread failed. Error was: %d\n", L4_ErrorCode());
+		return ((L4_ThreadId_t) {raw : -3});
+	}
 
 	L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
 

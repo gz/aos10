@@ -1,3 +1,8 @@
+/**
+ * TODO: process delete remove pending sleep timers
+ * TODO: manage thread ids
+ */
+
 #include <assert.h>
 #include <string.h>
 #include "process.h"
@@ -6,8 +11,9 @@
 #define verbose 2
 
 #define RESERVED_ID_BITS 10
-static unsigned int task;
-static LIST_HEAD(listhead, proc) process_head;
+#define MAX_RUNNING_PROCESS 128
+static process* ptable[MAX_RUNNING_PROCESS];
+static L4_Word_t second_time;
 
 static L4_BootRec_t* find_boot_executable(const char* name) {
 
@@ -44,8 +50,9 @@ static inline L4_ThreadId_t pid2tid(pid_t pid) {
 static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 	// find process with matching tid in list
-	for (process* p = process_head.lh_first; p != NULL; p = p->entries.le_next) {
-		if(!L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
+	for (int i=0; i<MAX_RUNNING_PROCESS; i++) {
+		process* p = ptable[i];
+		if(p != NULL && !L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
 			dprintf(0, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
 			send_ipc_reply(p->tid, SOS_PROCESS_WAIT, 1, tid2pid(finished_thread));
 			p->wait_for = L4_nilthread;
@@ -56,25 +63,31 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 
 static L4_ThreadId_t new_process_id(void) {
-	volatile int threadNo = ++task << RESERVED_ID_BITS;
-	return L4_GlobalId(threadNo, 1);
+
+	// we start at 1 because the first entry is used by sos
+	for(int i=1; i<MAX_RUNNING_PROCESS; i++) {
+		volatile int threadNo = (i) << RESERVED_ID_BITS;
+
+		if(ptable[i] == NULL)
+			return L4_GlobalId(threadNo, 1);
+	}
+
+	return L4_nilthread;
 }
 
 void process_init() {
-	LIST_INIT(&process_head);
-	task = 0;
+	for(int i=0; i<MAX_RUNNING_PROCESS; i++) {
+		ptable[i] = NULL;
+	}
+	second_time = 0;
 }
 
 
 process* get_process(L4_ThreadId_t tid) {
+	pid_t pid = tid2pid(tid);
+	assert(pid >= 0 && pid < MAX_RUNNING_PROCESS);
 
-	// find process with matching tid in list
-	for (process* p = process_head.lh_first; p != NULL; p = p->entries.le_next) {
-		if(L4_IsThreadEqual(tid, p->tid))
-			return p;
-	}
-
-	return NULL; // No process for given thread ID exists
+	return ptable[pid];
 }
 
 
@@ -84,7 +97,6 @@ int get_pid(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 
 void register_process(L4_ThreadId_t tid, char* name) {
-
 	process* new_process = malloc(sizeof(process));
 	assert(new_process != NULL);
 
@@ -114,8 +126,8 @@ void register_process(L4_ThreadId_t tid, char* name) {
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++)
 		new_process->page_index[i].address_ptr = 0;
 
-
-	LIST_INSERT_HEAD(&process_head, new_process, entries);
+	assert(ptable[tid2pid(tid)] == NULL);
+	ptable[tid2pid(tid)] = new_process;
 }
 
 
@@ -133,14 +145,22 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(boot_record != NULL) {
 		// Start a new task with this program
 		L4_ThreadId_t newtid = new_process_id();
+		if(L4_IsNilThread(newtid)) {
+			dprintf(0, "Process table is full. Cannot start new process.\n");
+			return IPC_SET_ERROR(-1);
+		}
 		register_process(newtid, name);
+
+		L4_Word_t utcb = ((second_time++ >= 2) ? -1 : 0);
 		newtid = sos_task_new(
 				newtid,
 				root_thread_g,
 				(void *) L4_SimpleExec_TextVstart(boot_record),
-				(void *) 0xC0000000
+				(void *) 0xC0000000,
+				utcb
 		);
-		dprintf(0, "Created task: ox%X\n", newtid);
+
+		dprintf(0, "Created task: ox%X with utcb:%d\n", newtid, utcb);
 
 		if(!L4_IsNilThread(tid)) {
 			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));
@@ -184,7 +204,7 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	// stop (delete?) thread
 	L4_AbortIpc_and_stop_Thread(to_delete->tid);
-	LIST_REMOVE(to_delete, entries);
+	ptable[pid] = NULL;
 
 	wait_wakeup(to_delete->tid);
 
@@ -236,18 +256,21 @@ int get_process_status(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	unsigned int added = 0;
 	process_t* process_desc_ptr = (process_t*) buf;
-	for (process* p = process_head.lh_first; p != NULL; p = p->entries.le_next) {
+	for (int i=0; i<MAX_RUNNING_PROCESS; i++) {
+		if(ptable[i] != NULL) {
+			process* p = ptable[i];
 
-		strcpy(process_desc_ptr->command, p->command);
-		process_desc_ptr->pid = tid2pid(p->tid);
-		process_desc_ptr->size = p->size;
-		process_desc_ptr->stime = (unsigned) ((time_stamp() - p->start_time) / 1000);
-		process_desc_ptr->ctime = 0;
+			strcpy(process_desc_ptr->command, p->command);
+			process_desc_ptr->pid = tid2pid(p->tid);
+			process_desc_ptr->size = p->size;
+			process_desc_ptr->stime = (unsigned) ((time_stamp() - p->start_time) / 1000);
+			process_desc_ptr->ctime = 0;
 
-		if(++added == max_processes)
-			break;
+			if(++added == max_processes)
+				break;
 
-		process_desc_ptr++;
+			process_desc_ptr++;
+		}
 	}
 
 	return set_ipc_reply(msg_p, 1, added);
