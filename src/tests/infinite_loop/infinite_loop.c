@@ -13,7 +13,7 @@ int main(void) {
 	printf("Infinite Looping Process is running...\n");
 
 	while(1) {
-		sleep(40000);
+		sleep(1000);
 	}
 
 }
