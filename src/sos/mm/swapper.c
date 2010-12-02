@@ -343,6 +343,7 @@ void swap_init() {
 int swap_out(L4_ThreadId_t initiator) {
 	page_queue_item* page = second_chance_select(&active_pages_head);
 	assert(page != NULL && !is_referenced(page));
+	// TODO page == NULL can actually happen since we don't place the ipc frames in the queue
 
 	// decide where in the swap file our page will be
 	if(page->swap_offset < 0 && (page->swap_offset = allocate_swap_entry()) < 0)
