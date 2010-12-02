@@ -10,6 +10,7 @@
 
 #define verbose 2
 
+static L4_Word_t next_task;
 #define RESERVED_ID_BITS 10
 #define MAX_RUNNING_PROCESS 128
 static process* ptable[MAX_RUNNING_PROCESS];
@@ -63,9 +64,17 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 static L4_ThreadId_t new_process_id(void) {
 
+	volatile int threadNo;
+
+	if(next_task < MAX_RUNNING_PROCESS && ptable[next_task] == NULL) {
+		threadNo = (next_task++) << RESERVED_ID_BITS;
+		return L4_GlobalId(threadNo, 1);
+	}
+
+	// in case next given entry is not free fall back to full table search
 	// we start at 1 because the first entry is used by sos
 	for(int i=1; i<MAX_RUNNING_PROCESS; i++) {
-		volatile int threadNo = (i) << RESERVED_ID_BITS;
+		threadNo = (i) << RESERVED_ID_BITS;
 
 		if(ptable[i] == NULL)
 			return L4_GlobalId(threadNo, 1);
@@ -75,6 +84,7 @@ static L4_ThreadId_t new_process_id(void) {
 }
 
 void process_init() {
+	next_task = 1; // because root is 0
 	for(int i=0; i<MAX_RUNNING_PROCESS; i++) {
 		ptable[i] = NULL;
 	}

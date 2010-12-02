@@ -10,6 +10,6 @@
  * thread ids.
  **/
 int main(void) {
-	printf("Hello World\n");
+	printf("Hello World, I'm %d\n", my_id());
 	process_create("tip");
 }
