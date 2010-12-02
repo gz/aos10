@@ -208,8 +208,9 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		}
 	}
 
+	remove_timers(to_delete->tid);
 	// stop (delete?) thread
-	L4_AbortIpc_and_stop_Thread(to_delete->tid);
+	L4_Stop(to_delete->tid);
 	ptable[pid] = NULL;
 
 	wait_wakeup(to_delete->tid);
@@ -220,6 +221,7 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
 	}
 	else {
+		L4_AbortIpc_and_stop(to_delete->tid);
 		free(to_delete);
 		return 0;
 	}
