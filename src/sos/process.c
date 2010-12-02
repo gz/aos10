@@ -13,7 +13,6 @@
 #define RESERVED_ID_BITS 10
 #define MAX_RUNNING_PROCESS 128
 static process* ptable[MAX_RUNNING_PROCESS];
-static L4_Word_t second_time;
 
 static L4_BootRec_t* find_boot_executable(const char* name) {
 
@@ -79,7 +78,6 @@ void process_init() {
 	for(int i=0; i<MAX_RUNNING_PROCESS; i++) {
 		ptable[i] = NULL;
 	}
-	second_time = 0;
 }
 
 
@@ -151,16 +149,14 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		}
 		register_process(newtid, name);
 
-		L4_Word_t utcb = ((second_time++ >= 2) ? -1 : 0);
 		newtid = sos_task_new(
 				newtid,
 				root_thread_g,
 				(void *) L4_SimpleExec_TextVstart(boot_record),
-				(void *) 0xC0000000,
-				utcb
+				(void *) 0xC0000000
 		);
 
-		dprintf(0, "Created task: ox%X with utcb:%d\n", newtid, utcb);
+		dprintf(0, "Created task: ox%X\n", newtid);
 
 		if(!L4_IsNilThread(tid)) {
 			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));

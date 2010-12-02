@@ -291,7 +291,7 @@ L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack) {
 }
 
 // Create and start a new task
-L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack, L4_Word_t utcb_base) {
+L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack) {
 
 	int res;
 	// Create an inactive thread
@@ -311,10 +311,17 @@ L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypo
 	}
 
 	// Activate thread
-	res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) utcb_base);
+	res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, NULL);
 	if (!res) {
-		dprintf(0, "Activate thread failed. Error was: %d\n", L4_ErrorCode());
-		return ((L4_ThreadId_t) {raw : -3});
+		if(L4_ErrorCode() == 6) {
+			// thread activated once before, try to start with utcb == -1
+			res = L4_ThreadControl(tid, tid, root_thread_g, pager, L4_anythread, L4_anythread, (void *) -1);
+		}
+
+		if(!res) {
+			dprintf(0, "Activate thread failed. Error was: %d\n", L4_ErrorCode());
+			return ((L4_ThreadId_t) {raw : -3});
+		}
 	}
 
 	L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
