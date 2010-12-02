@@ -294,12 +294,14 @@ void remove_timers(L4_ThreadId_t tid) {
 	// if the queue head belongs to this tid, simulate timer interrupt
 	// do this as long as the new queue head also belongs to this tid
 	while (L4_IsThreadEqual(timer_queue_head->owner,tid)) {
+		timer_queue_head->expiration_time = time_stamp();
 		timer0_irq(L4_nilthread,NULL); // artificial call to interrupt handler
 	};
 
 	// remove all queue entries further down the queue belonging to tid
 	alarm_timer** atp = (alarm_timer**) &timer_queue_head;
 	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
+		dprintf(0,"walking timer queue, entry belongs to tid = %d\n", (*atp)->owner.raw);
 		if(L4_IsThreadEqual((*atp)->next_alarm->owner,tid)) {
 			alarm_timer* to_delete = (*atp)->next_alarm;
 			(*atp)->next_alarm = (*atp)->next_alarm->next_alarm;
