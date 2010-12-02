@@ -182,7 +182,6 @@ static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			// update file attributes
 			f->file->status.st_size = new_size;
 			f->file->status.st_atime = attr->atime.useconds / 1000;
-
 			send_ipc_reply(f->owner, SOS_WRITE, 1, f->to_write);
 		}
 		break;

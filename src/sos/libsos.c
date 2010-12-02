@@ -291,9 +291,13 @@ L4_ThreadId_t sos_thread_new(void *entrypoint, void *stack) {
 }
 
 // Create and start a new task
-L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack) {
+L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypoint, void *stack, L4_Bool_t new) {
 
 	int res;
+
+
+	dprintf(0, "new task, create space and shit\n");
+
 	// Create an inactive thread
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);
@@ -324,8 +328,8 @@ L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypo
 		}
 	}
 
-	L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
 
+	L4_Start_SpIp(tid, (L4_Word_t) stack, (L4_Word_t) entrypoint);
 	return tid;
 }
 

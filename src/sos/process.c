@@ -13,7 +13,7 @@
 static L4_Word_t next_task;
 #define RESERVED_ID_BITS 10
 #define MAX_RUNNING_PROCESS 128
-static process* ptable[MAX_RUNNING_PROCESS];
+static process ptable[MAX_RUNNING_PROCESS];
 
 static L4_BootRec_t* find_boot_executable(const char* name) {
 
@@ -42,8 +42,10 @@ static inline pid_t tid2pid(L4_ThreadId_t tid) {
 
 
 static inline L4_ThreadId_t pid2tid(pid_t pid) {
-	volatile int threadNo = pid << RESERVED_ID_BITS;
-	return L4_GlobalId(threadNo, 1);
+	assert(pid >=0 && pid < MAX_RUNNING_PROCESS);
+	assert(ptable[pid].is_active);
+
+	return ptable[pid].tid;
 }
 
 
@@ -51,7 +53,7 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 	// find process with matching tid in list
 	for (int i=0; i<MAX_RUNNING_PROCESS; i++) {
-		process* p = ptable[i];
+		process* p = &ptable[i];
 		if(p != NULL && !L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
 			dprintf(0, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
 			send_ipc_reply(p->tid, SOS_PROCESS_WAIT, 1, tid2pid(finished_thread));
@@ -62,32 +64,43 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 }
 
 
-static L4_ThreadId_t new_process_id(void) {
+static process* allocate_process_entry(void) {
 
-	volatile int threadNo;
-
-	if(next_task < MAX_RUNNING_PROCESS && ptable[next_task] == NULL) {
-		threadNo = (next_task++) << RESERVED_ID_BITS;
-		return L4_GlobalId(threadNo, 1);
+	if(next_task < MAX_RUNNING_PROCESS && ptable[next_task].is_active == FALSE) {
+		return &ptable[next_task++];
 	}
 
 	// in case next given entry is not free fall back to full table search
 	// we start at 1 because the first entry is used by sos
 	for(int i=1; i<MAX_RUNNING_PROCESS; i++) {
-		threadNo = (i) << RESERVED_ID_BITS;
 
-		if(ptable[i] == NULL)
-			return L4_GlobalId(threadNo, 1);
+		if(ptable[i].is_active == FALSE) {
+			return &ptable[i];
+		}
+
 	}
 
-	return L4_nilthread;
+	return NULL;
 }
 
 void process_init() {
-	next_task = 1; // because root is 0
+	next_task = 0; // because root is 0
+
+	// initialize process table
 	for(int i=0; i<MAX_RUNNING_PROCESS; i++) {
-		ptable[i] = NULL;
+		ptable[i].is_active = FALSE;
+		ptable[i].page_index = NULL;
+		ptable[i].size = 0;
+		ptable[i].start_time = 0ULL;
+		ptable[i].wait_for = L4_nilthread;
+
+		volatile int threadNo = i << RESERVED_ID_BITS;
+		ptable[i].tid = L4_GlobalId(threadNo, 0);
 	}
+
+	// add root process as first process in table
+	register_process("[sos]");
+	ptable[0].tid = root_thread_g;
 }
 
 
@@ -95,7 +108,7 @@ process* get_process(L4_ThreadId_t tid) {
 	pid_t pid = tid2pid(tid);
 	assert(pid >= 0 && pid < MAX_RUNNING_PROCESS);
 
-	return ptable[pid];
+	return &ptable[pid];
 }
 
 
@@ -104,16 +117,17 @@ int get_pid(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 }
 
 
-void register_process(L4_ThreadId_t tid, char* name) {
-	process* new_process = malloc(sizeof(process));
+process* register_process(char* name) {
+	process* new_process = allocate_process_entry();
 	assert(new_process != NULL);
 
 	// initialize process data
-	new_process->tid = tid;
-	new_process->wait_for = L4_nilthread;
-	new_process->size = 1; // 1 because we count the shared page for syscalls TODO
-	new_process->start_time = time_stamp();
 	strcpy(new_process->command, name);
+	new_process->wait_for = L4_nilthread;
+	new_process->size = 1; // TODO in elf loading replace this with binary page size
+	new_process->start_time = time_stamp();
+	new_process->tid.global.X.version = 1; // TODO why is this not working with increasing version number?
+	new_process->is_active = TRUE;
 
 	// set up file table with default NULL values
 	for(int i=0; i<PROCESS_MAX_FILES; i++) {
@@ -126,16 +140,17 @@ void register_process(L4_ThreadId_t tid, char* name) {
 	assert(file_table[0] != NULL);
 	file_table[0]->file = file_cache[0];
 	file_table[0]->mode = FM_WRITE;
-	file_table[0]->owner = tid;
+	file_table[0]->owner = new_process->tid;
 	file_table[0]->to_read = 0;
 	file_table[0]->client_buffer = NULL;
 
 	// initialize page index (first level page table)
+	new_process->page_index = malloc(sizeof(page_table_entry)*FIRST_LEVEL_ENTRIES);
+	assert(new_process->page_index != NULL);
 	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++)
-		new_process->page_index[i].address_ptr = 0;
+		new_process->page_index[i].address_ptr = NULL;
 
-	assert(ptable[tid2pid(tid)] == NULL);
-	ptable[tid2pid(tid)] = new_process;
+	return new_process;
 }
 
 
@@ -152,21 +167,16 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(boot_record != NULL) {
 		// Start a new task with this program
-		L4_ThreadId_t newtid = new_process_id();
-		if(L4_IsNilThread(newtid)) {
-			dprintf(0, "Process table is full. Cannot start new process.\n");
-			return IPC_SET_ERROR(-1);
-		}
-		register_process(newtid, name);
-
-		newtid = sos_task_new(
-				newtid,
+		process* pentry = register_process(name);
+		L4_ThreadId_t newtid = sos_task_new(
+				pentry->tid,
 				root_thread_g,
 				(void *) L4_SimpleExec_TextVstart(boot_record),
-				(void *) 0xC0000000
+				(void *) 0xC0000000,
+				L4_Version(pentry->tid) == 1
 		);
 
-		dprintf(0, "Created task: ox%X\n", newtid);
+		dprintf(0, "Created task: ox%X (pentry->tid:ox%X)\n", newtid, pentry->tid);
 
 		if(!L4_IsNilThread(tid)) {
 			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));
@@ -196,6 +206,8 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	pager_unmap_all(to_delete->tid, NULL, NULL); // remove mappings for this thread in L4
 	pager_free_all(to_delete->tid); // free frames and pager memory
+	free(ptable[pid].page_index);
+	ptable[pid].page_index = NULL;
 
 	// close all files & free handlers
 	for(int i=0; i<PROCESS_MAX_FILES; i++) {
@@ -208,21 +220,19 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		}
 	}
 
-	remove_timers(to_delete->tid);
 	// stop (delete?) thread
-	L4_Stop(to_delete->tid);
-	ptable[pid] = NULL;
+	remove_timers(to_delete->tid);
+	L4_AbortIpc_and_stop(to_delete->tid);
+	ptable[pid].is_active = FALSE;
 
 	wait_wakeup(to_delete->tid);
 
 	// return to the thread only if he himself has not requested the delete
 	if(!L4_IsThreadEqual(tid, to_delete->tid)) {
-		free(to_delete);
-		return set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
+		set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
+		return 1;
 	}
 	else {
-		L4_AbortIpc_and_stop(to_delete->tid);
-		free(to_delete);
 		return 0;
 	}
 
@@ -265,8 +275,8 @@ int get_process_status(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	unsigned int added = 0;
 	process_t* process_desc_ptr = (process_t*) buf;
 	for (int i=0; i<MAX_RUNNING_PROCESS; i++) {
-		if(ptable[i] != NULL) {
-			process* p = ptable[i];
+		if(ptable[i].is_active) {
+			process* p = &ptable[i];
 
 			strcpy(process_desc_ptr->command, p->command);
 			process_desc_ptr->pid = tid2pid(p->tid);

@@ -185,7 +185,6 @@ int main(void)
 
     // Initialize process structure and register root process
     process_init();
-    register_process(L4_Myself(), "[sos]");
 
     // Spawn the setup thread which completes the rest of the initialization,
     // leaving this thread free to act as a pager and interrupt handler.
