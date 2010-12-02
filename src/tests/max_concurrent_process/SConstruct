@@ -1,0 +1,6 @@
+Import("*")
+
+sources=Split("max_concurrent_processes.c")
+obj = env.MyProgram("tmp", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+
+Return("obj")

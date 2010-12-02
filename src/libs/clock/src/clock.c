@@ -295,21 +295,27 @@ void remove_timers(L4_ThreadId_t tid) {
 	// do this as long as the new queue head also belongs to this tid
 	while (L4_IsThreadEqual(timer_queue_head->owner,tid)) {
 		dprintf(0,"remove head of timer queue, belonging to tid = %d\n", tid.raw);
-		timer_queue_head->expiration_time = time_stamp();
-		timer_queue_head->owner = L4_nilthread; // TODO this is hack removal, we use interrupt to do our work and set owner to nilthread :-/
-		timer0_irq(L4_nilthread,NULL); // artificial call to interrupt handler
+		alarm_timer* to_delete = timer_queue_head;
+		timer_queue_head = timer_queue_head->next_alarm;
+
+		if(timer_queue_head != NULL) {
+			// restart with delay of new head
+			timestamp_t delay = max(timer_queue_head->expiration_time - time_stamp(), 1);
+			TIMER0_SET(MICROSECONDS_TO_TICKS(delay));
+			TIMER0_START();
+		}
+		free(to_delete);
 	}
 
 	// remove all queue entries further down the queue belonging to tid
 	alarm_timer** atp = (alarm_timer**) &timer_queue_head;
 	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
-		dprintf(0,"walking timer queue, entry belongs to tid = %d\n", (*atp)->owner.raw);
+		dprintf(0,"walking timer queue, entry belongs to tid = 0x%X\n", (*atp)->owner);
 
 		if(L4_IsThreadEqual((*atp)->next_alarm->owner,tid)) {
-			dprintf(0,"remove entry from timer queue, belonging to tid = %d\n", tid.raw);
+			dprintf(0,"remove entry from timer queue, belonging to tid = 0x%X\n", tid);
 			alarm_timer* to_delete = (*atp)->next_alarm;
 			(*atp)->next_alarm = (*atp)->next_alarm->next_alarm;
-			//to_delete->alarm_function(tid,CLOCK_R_CNCL);
 			free(to_delete);
 		}
 

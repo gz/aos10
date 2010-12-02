@@ -1,6 +1,18 @@
 /**
- * TODO: process delete remove pending sleep timers
- * TODO: manage thread ids
+ * Process
+ * =============
+ * This holds syscall handlers for process creation & deletion as well
+ * as syscalls to get information about a process.
+ *
+ * At any point in time the process table (ptable) holds all currently
+ * running processes in the system. A process is inserted in the ptable
+ * through process_create and stopped (and deleted from the ptable)
+ * through process delete. The ptable is a hash table using
+ * the pid of a process as a key. The key is directly computed from the
+ * L4 thread id of a process.
+ * The size of the ptable limits the number of processes which can
+ * run concurrently on the system (see MAX_RUNNING_PROCESS).
+ * The pid is unique overall concurrently running processes.
  */
 
 #include <assert.h>
@@ -13,8 +25,15 @@
 static L4_Word_t next_task;
 #define RESERVED_ID_BITS 10
 #define MAX_RUNNING_PROCESS 128
+/** Table containing currently running processes */
 static process ptable[MAX_RUNNING_PROCESS];
 
+
+/**
+ * Finds a executable placed within in the bootimage file.
+ * @param name executable name
+ * @return boot record pointer for the executable or NULL if not found
+ */
 static L4_BootRec_t* find_boot_executable(const char* name) {
 
 	// Loop through the BootInfo starting executables
@@ -36,19 +55,35 @@ static L4_BootRec_t* find_boot_executable(const char* name) {
 }
 
 
+/**
+ * Converts a given thread id to the corresponding pid.
+ * @param tid Thread ID
+ * @return pid for the thread
+ */
 static inline pid_t tid2pid(L4_ThreadId_t tid) {
 	return L4_ThreadNo(tid) >> RESERVED_ID_BITS;
 }
 
 
+/**
+ * Returns the Thread ID of a given pid (does a lookup in the
+ * ptable since we precomputed the ids on process_init.
+ * @param pid
+ * @return Thread ID
+ */
 static inline L4_ThreadId_t pid2tid(pid_t pid) {
 	assert(pid >=0 && pid < MAX_RUNNING_PROCESS);
-	assert(ptable[pid].is_active);
+	//assert(ptable[pid].is_active);
 
 	return ptable[pid].tid;
 }
 
 
+/**
+ * Wakes up all threads waiting either for the finished_thread
+ * or just any thread.
+ * @param finished_thread
+ */
 static void wait_wakeup(L4_ThreadId_t finished_thread) {
 
 	// find process with matching tid in list
@@ -64,6 +99,16 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 }
 
 
+/**
+ * Finds a free spot in the process table and returns a pointer
+ * to it. Note that a free spot in the process table is when
+ * is_active is false.
+ * The search algorithm uses a counter variable which is incremented
+ * every time this function is called if this doesn't work
+ * a fallback which does a linear search through the table is used.
+ *
+ * @return pointer to free entry or NULL if process table is full
+ */
 static process* allocate_process_entry(void) {
 
 	if(next_task < MAX_RUNNING_PROCESS && ptable[next_task].is_active == FALSE) {
@@ -83,6 +128,10 @@ static process* allocate_process_entry(void) {
 	return NULL;
 }
 
+
+/**
+ * Initializes the process table with default values.
+ */
 void process_init() {
 	next_task = 0; // because root is 0
 
@@ -104,6 +153,11 @@ void process_init() {
 }
 
 
+/**
+ * Finds a process in the ptable.
+ * @param tid Thread ID of the process we want
+ * @return pointer to the ptable entry
+ */
 process* get_process(L4_ThreadId_t tid) {
 	pid_t pid = tid2pid(tid);
 	assert(pid >= 0 && pid < MAX_RUNNING_PROCESS);
@@ -112,14 +166,29 @@ process* get_process(L4_ThreadId_t tid) {
 }
 
 
+/**
+ * Syscall handler for my_id()
+ *
+ * @param tid Thread ID Callee
+ * @param msg_p IPC message
+ * @param buf shared memory (not used)
+ * @return 1
+ */
 int get_pid(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	return set_ipc_reply(msg_p, 1, tid2pid(tid));
 }
 
 
+/**
+ * Registers a executable within the process table.
+ * @param name of the executable
+ * @return pointer to the process entry or NULL if process table
+ * is full
+ */
 process* register_process(char* name) {
 	process* new_process = allocate_process_entry();
-	assert(new_process != NULL);
+	if(new_process == NULL)
+		return NULL;
 
 	// initialize process data
 	strcpy(new_process->command, name);
@@ -154,9 +223,20 @@ process* register_process(char* name) {
 }
 
 
+/**
+ * Syscall handler for creating a process. This will perform the following steps:
+ * 1. Find the executable in the boot image
+ * 2. Setup a entry in the process table
+ * 3. Tell L4 to start the process
+ *
+ * @param tid Callee Thread ID
+ * @param msg_p IPC message
+ * @param buf Shared IPC memory (containing name of the executable)
+ * @return 1 (send a reply to the callee)
+ */
 int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-	if(buf == NULL && !L4_IsNilThread(tid))
-		return IPC_SET_ERROR(-1);
+	if(buf == NULL)
+		return IPC_SET_ERROR(EXECUTABLE_NOT_FOUND);
 
 	// copy executable name, make sure it's a valid string
 	char name[N_NAME+1];
@@ -168,6 +248,9 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(boot_record != NULL) {
 		// Start a new task with this program
 		process* pentry = register_process(name);
+		if(pentry == NULL)
+			return IPC_SET_ERROR(PROCESS_TABLE_FULL);
+
 		L4_ThreadId_t newtid = sos_task_new(
 				pentry->tid,
 				root_thread_g,
@@ -176,70 +259,103 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 				L4_Version(pentry->tid) == 1
 		);
 
-		dprintf(0, "Created task: ox%X (pentry->tid:ox%X)\n", newtid, pentry->tid);
-
-		if(!L4_IsNilThread(tid)) {
-			dprintf(0, "returning with pid:%d\n", tid2pid(newtid));
-			return set_ipc_reply(msg_p, 1, tid2pid(newtid));
-		}
+		dprintf(0, "Created task: ox%X (pentry->tid:ox%X) pid:%d\n", newtid, pentry->tid, tid2pid(newtid));
+		return set_ipc_reply(msg_p, 1, tid2pid(newtid));
 	}
 
-	if(!L4_IsNilThread(tid))
-		return IPC_SET_ERROR(-1); // executable not found
-
-	return 0; // return if not called from syscall context
+	return IPC_SET_ERROR(EXECUTABLE_NOT_FOUND); // executable not found
 }
 
 
+/**
+ * Syscall handler for process_delete. We make sure to free all memory
+ * a process has allocated in the server during it's runtime is freed
+ * and no future callback function will call this thread anymore (in
+ * case kill is called while a process was waiting in a syscall).
+ * Syscalls where this can happen are sleep, nfs_write, nfs_read
+ * and nfs_create. All these cases are handled accordingly in this
+ * function. Note that process wait does not require special handling
+ * since we reset the wait_for attribute in the register thread.
+ *
+ * @param tid Thread ID of callee
+ * @param msg_p IPC message
+ * @param buf Shared IPC memory (not used)
+ * @return If the process kills itself we don't send a reply (since
+ * we aborted before) otherwise we send back the killed pid.
+ */
 int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
-	dprintf(0, "got pid to kill:%d\n", pid);
 	process* to_delete = get_process(pid2tid(pid));
-	if(to_delete == NULL)
+	if(!to_delete->is_active)
 		return IPC_SET_ERROR(-1);
 
-	dprintf(0, "deleting process: 0x%X\n", to_delete->tid);
+	dprintf(2, "Deleting process: 0x%X\n", to_delete->tid);
 
-	pager_unmap_all(to_delete->tid, NULL, NULL); // remove mappings for this thread in L4
+	pager_unmap_all(to_delete->tid, NULL, NULL);
 	pager_free_all(to_delete->tid); // free frames and pager memory
-	free(ptable[pid].page_index);
+	free(ptable[pid].page_index);	// free 1st level page index
 	ptable[pid].page_index = NULL;
 
 	// close all files & free handlers
 	for(int i=0; i<PROCESS_MAX_FILES; i++) {
 		if(to_delete->filetable[i] != NULL) {
-			if(L4_IsThreadEqual(to_delete->filetable[i]->file->reader, to_delete->tid))
-				to_delete->filetable[i]->file->reader = L4_nilthread;
+			if(to_delete->filetable[i]->awaits_callback)
+				// process currently is in a read/write syscall
+				// since we pass around this pointer for the
+				// write back calls we cannot free it yet
+				// (it's done after the callback complete)
+				to_delete->filetable[i]->awaits_callback = FALSE;
+			else {
+				if(L4_IsThreadEqual(to_delete->filetable[i]->file->reader, to_delete->tid))
+					to_delete->filetable[i]->file->reader = L4_nilthread;
 
-			free(to_delete->filetable[i]);
-			to_delete->filetable[i] = NULL;
+				free(to_delete->filetable[i]);
+				to_delete->filetable[i] = NULL;
+			}
+
 		}
 	}
 
-	// stop (delete?) thread
+	// check if there are any file creation for this process pending
+	// if yes, see to it that we don't reply back
+	for(int i=0; i<DIR_CACHE_SIZE; i++) {
+		if(file_cache[i] != NULL && file_cache[i]->creation_pending && L4_IsThreadEqual(to_delete->tid, file_cache[i]->reader))
+			file_cache[i]->reader = L4_nilthread;
+	}
+
+	// remove pending sleep timers for this process
 	remove_timers(to_delete->tid);
+
+	// stop (delete?) thread
 	L4_AbortIpc_and_stop(to_delete->tid);
 	ptable[pid].is_active = FALSE;
 
+	// wakup all processes waiting on this thread
 	wait_wakeup(to_delete->tid);
 
 	// return to the thread only if he himself has not requested the delete
 	if(!L4_IsThreadEqual(tid, to_delete->tid)) {
-		set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
-		return 1;
-	}
-	else {
-		return 0;
+		return set_ipc_reply(msg_p, 1, tid2pid(to_delete->tid));
 	}
 
-	return 0;
+	return 0; // thread is killed, don't reply
 }
 
 
+/**
+ * Syscall handler for process wait. Sets the wait_for attribute in the
+ * process descriptor. We reply to this syscall in the wait_wakeup
+ * function (called by a process_delete call)
+ *
+ * @param tid Calle Thread ID
+ * @param msg_p IPC Message
+ * @param buf Shared memory buffer (not used)
+ * @return 0 don't send a reply (yet)
+ */
 int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	process* p = get_process(tid);
 
@@ -264,6 +380,15 @@ int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 }
 
 
+/**
+ * Process Status Syscall handler. Copies data about a
+ * requested number of processes in the shared IPC memory.
+ *
+ * @param tid Callee Thread ID
+ * @param msg_p IPC Message
+ * @param buf Shared IPC memory pointer
+ * @return 1 (send a reply)
+ */
 int get_process_status(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(L4_UntypedWords(msg_p->tag) != 1 || buf == NULL)

@@ -15,6 +15,7 @@ typedef struct finfo {
 	char filename[MAX_PATH_LENGTH];					/**< Buffer for the name of the file */
 	stat_t status;
 
+	L4_Bool_t creation_pending;						/**< yet awaiting callback for file creation */
 	L4_ThreadId_t reader;							/**< for special files: thread who has read access*/
 	struct serial* serial_handle;					/**< serial handler (only used for special files) */
 	circular_buffer* cbuffer;						/**< circular buffer (used for serial files) */
@@ -41,6 +42,7 @@ typedef struct fentry {
 	file_info* file;			/**< pointer to the corresponding file_info */
 	L4_ThreadId_t owner;		/**< owner of this file table entry */
 	fmode_t mode;				/**< mode in which the file was opened */
+	L4_Bool_t awaits_callback; /**< used for process deletion to determine what to do with this handle */
 
 	data_ptr client_buffer;		/**< pointer to user space memory location where we should write the data on read */
 	L4_Word_t to_read;			/**< number of bytes to read (set by syscall read()) */

@@ -6,13 +6,22 @@ pid_t process_create(const char *path) {
 	assert(strlen(path) < N_NAME);
 
     strcpy((char*) ipc_memory_start, path);
-
     L4_Msg_t msg;
-    L4_MsgTag_t tag = system_call(SOS_PROCESS_CREATE, &msg, 0);
-	assert(L4_UntypedWords(tag) == 1);
 
-	pid_t pid = (pid_t) L4_MsgWord(&msg, 0);
-	return pid;
+    // In case there are too many concurrent processes
+	// we do busy waiting until our process can be
+	// created.
+	pid_t pid = PROCESS_TABLE_FULL;
+	do {
+		L4_MsgTag_t tag = system_call(SOS_PROCESS_CREATE, &msg, 0);
+		assert(L4_UntypedWords(tag) == 1);
+		pid = (pid_t) L4_MsgWord(&msg, 0);
+
+		if(pid != PROCESS_TABLE_FULL)
+			return pid;
+
+		sleep(100);
+	} while(TRUE);
 }
 
 

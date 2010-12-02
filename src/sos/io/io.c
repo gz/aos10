@@ -67,6 +67,8 @@ file_info* file_cache[DIR_CACHE_SIZE];
  */
 inline int file_cache_insert(file_info* fi) {
 	assert(file_cache_next_entry < DIR_CACHE_SIZE);
+
+	fi->creation_pending = FALSE;
 	file_cache[file_cache_next_entry] = fi;
 
 	return file_cache_next_entry++;
@@ -150,6 +152,7 @@ file_table_entry* create_file_descriptor(file_info* fi, L4_ThreadId_t tid, fmode
 	fte->read_position = 0;
 	fte->write_position = 0;
 	fte->client_buffer = NULL;
+	fte->awaits_callback = FALSE;
 	fte->mode = mode;
 
 	return fte;

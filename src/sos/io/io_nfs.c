@@ -137,6 +137,13 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
 
 	file_table_entry* f = (file_table_entry*) token;
 
+	if(!f->awaits_callback) {
+		// can happen when the process was killed in the mean time (see process_delete)
+		dprintf(0, "nfs_read_callback: process 0x%X was killed :-( dont reply\n", f->owner);
+		free(f);
+		return;
+	}
+
 	switch(status) {
 
 		case NFS_OK:
@@ -161,6 +168,7 @@ static void nfs_read_callback(uintptr_t token, int status, fattr_t *attr, int by
  */
 void read_nfs(file_table_entry* f) {
 	nfs_read(&f->file->nfs_handle, f->read_position, f->to_read, &nfs_read_callback, (int)f);
+	f->awaits_callback = TRUE;
 }
 
 
@@ -172,6 +180,14 @@ void read_nfs(file_table_entry* f) {
 static void nfs_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 	file_table_entry* f = (file_table_entry*) token;
+
+	if(!f->awaits_callback) {
+		// can happen when the process was killed in the mean time (see process_delete)
+		dprintf(0, "nfs_write_callback: process 0x%X was killed :-( dont reply\n", f->owner);
+		free(f);
+		return;
+	}
+
 	switch(status) {
 
 		case NFS_OK:
@@ -222,7 +238,7 @@ file_info* create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
 	fi->read = &read_nfs;
 	fi->write = &write_nfs;
 	fi->close = NULL;
-
+	fi->creation_pending = TRUE;
 	fi->status.st_fmode = mode; // we abuse this field to know in which mode the client wants to open the file
 	fi->reader = recipient; // we abuse this field to know where to send our reply in the callback
 
@@ -243,6 +259,7 @@ file_info* create_nfs(char* name, L4_ThreadId_t recipient, fmode_t mode) {
  */
 void write_nfs(file_table_entry* f) {
 	nfs_write(&f->file->nfs_handle, f->write_position, f->to_write, f->client_buffer, &nfs_write_callback, (int)f);
+	f->awaits_callback = TRUE;
 }
 
 
@@ -278,6 +295,7 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 				fi->write = &write_nfs;
 				fi->close = NULL;
 				fi->reader = L4_anythread;
+				fi->creation_pending = TRUE;
 
 				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status, (int)fi);
 			} // else ignore ., .., swap

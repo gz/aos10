@@ -65,7 +65,8 @@ static void init_thread(void)
 
 		dprintf(0, "Created task: %lx\n", sos_tid2task(newtid));
     }*/
-	create_process(L4_nilthread, NULL, "sosh");
+	L4_Msg_t msg;
+	create_process(L4_nilthread, &msg, "sosh");
 
     // Thread finished - block forever
     for (;;)

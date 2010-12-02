@@ -3,6 +3,10 @@
 
 #define N_NAME 32
 
+// Error returns for process_create syscall (server side)
+#define EXECUTABLE_NOT_FOUND -1
+#define PROCESS_TABLE_FULL -2
+
 typedef int pid_t;
 
 typedef struct {
