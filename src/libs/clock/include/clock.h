@@ -42,6 +42,13 @@ int start_timer(void);
 int register_timer(uint64_t delay, L4_ThreadId_t client);  
 
 /*
+ * Removes all currently registred timers for a given thread.
+ *    tid:    Thread ID.
+ *
+ */
+void remove_timers(L4_ThreadId_t tid);
+
+/*
  * Returns present time in microseconds since booting.
  *
  * Returns a negative value if failure.

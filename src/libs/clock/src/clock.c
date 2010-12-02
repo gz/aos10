@@ -190,7 +190,7 @@ int timer_overflow_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
  * @return 1 because we wan't to send a reply in the syscall loop
  */
 int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
-	assert( ((*(L4_Word_t*)OST_STATUS)) & 0x1); // this must only be called during interrupt
+	assert(L4_IsNilThread(tid) || ((*(L4_Word_t*)OST_STATUS)) & 0x1); // this must only be called during interrupt
 	assert(timer_queue_head != NULL);
 
 	// set timer to next alarm or if they're already due we call their alarm function
@@ -212,9 +212,12 @@ int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 			}
 
 	}
-
-	(*(L4_Word_t*)OST_STATUS) |= 0x1; // clear the timestamp timer interrupt bit
-	return set_ipc_reply(msg_p, 0); // return to interrupt thread with 0 msg
+	if (L4_IsNilThread(tid))
+		return 0; // don't interfere with ipc, because the method was not called as interrupt handler
+	else {
+		(*(L4_Word_t*)OST_STATUS) |= 0x1; // clear the timestamp timer interrupt bit
+		return set_ipc_reply(msg_p, 0); // return to interrupt thread with 0 msg
+	}
 }
 
 
@@ -282,13 +285,29 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
  * @param tid
  * @return
  */
-/*void remove_timer(L4_ThreadId_t tid) {
+void remove_timers(L4_ThreadId_t tid) {
+	// queue is empty, nothing to do
+	if(timer_queue_head == NULL) {
+		return;
+	}
 
-	L4_DeassociateInterrupt(timer0_irq_tid);
-	alarm_timer* old_head = timer_queue_head;
+	// if the queue head belongs to this tid, simulate timer interrupt
+	// do this as long as the new queue head also belongs to this tid
+	while (L4_IsThreadEqual(timer_queue_head->owner,tid)) {
+		timer0_irq(L4_nilthread,NULL); // artificial call to interrupt handler
+	};
 
-	L4_AssociateInterrupt(timer0_irq_tid, root_thread_g);
-}*/
+	// remove all queue entries further down the queue belonging to tid
+	alarm_timer** atp = (alarm_timer**) &timer_queue_head;
+	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
+		if(L4_IsThreadEqual((*atp)->next_alarm->owner,tid)) {
+			alarm_timer* to_delete = (*atp)->next_alarm;
+			(*atp)->next_alarm = (*atp)->next_alarm->next_alarm;
+			to_delete->alarm_function(tid,CLOCK_R_CNCL);
+			free(to_delete);
+		}
+	}
+}
 
 
 /**
