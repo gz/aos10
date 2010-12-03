@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 3
+#define verbose 0
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0

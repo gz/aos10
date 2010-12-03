@@ -20,7 +20,7 @@
 #include "process.h"
 #include "libsos.h"
 
-#define verbose 2
+#define verbose 1
 
 static L4_Word_t next_task;
 #define RESERVED_ID_BITS 10
@@ -114,6 +114,8 @@ static process* allocate_process_entry(void) {
 	if(next_task < MAX_RUNNING_PROCESS && ptable[next_task].is_active == FALSE) {
 		return &ptable[next_task++];
 	}
+	if(next_task == MAX_RUNNING_PROCESS)
+		next_task = 2; // reset
 
 	// in case next given entry is not free fall back to full table search
 	// we start at 1 because the first entry is used by sos
@@ -289,6 +291,9 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
+	if(pid == 0)
+		return IPC_SET_ERROR(-1);
+
 	process* to_delete = get_process(pid2tid(pid));
 	if(!to_delete->is_active)
 		return IPC_SET_ERROR(-1);
