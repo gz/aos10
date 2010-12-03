@@ -257,7 +257,7 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		L4_ThreadId_t newtid = sos_task_new(
 				pentry->tid,
 				root_thread_g,
-				(void *) L4_SimpleExec_TextVstart(boot_record),
+				(void *) L4_SimpleExec_TextVstart(boot_record), //0x1000,
 				(void *) 0xC0000000,
 				L4_Version(pentry->tid) == 1
 		);

@@ -50,7 +50,7 @@ sos = rootserver_env.Application("sos");
 
 # Use the app_env environment for building everything else that will run in the
 # userland context.  Can't add libs/sos 'cause it doesn't exist yet.
-app_env=env.Copy("userland", LINKFLAGS=["-r"])
+app_env=env.Copy("userland", LINKFLAGS=["-Ttext=0x1000"])
 app_env.AddLibrary("l4")
 app_env.AddLibrary("c", system="sos")
 app_env.AddLibrary("elf")
@@ -71,8 +71,8 @@ app8 = app_env.Application("tests/max_concurrent_process")
 
 # Bootimage takes a comma seperated list of Applications that are linked
 # together into a single bootimg.bin binary.
-bootimg = env.Bootimage(l4kernel, sos, app1, app2, app3, app4, app5, app6, app7, app8)
+bootimg = env.Bootimage(l4kernel, sos, app1)
 
-Default(bootimg) # Default build target is the bootimage.
+Default(bootimg, app1, app2, app3, app4, app5, app6, app7, app8) # Default build target is the bootimage.
 
 # vim:ft=python:

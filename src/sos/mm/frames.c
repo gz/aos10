@@ -22,7 +22,7 @@
 #define verbose 1
 
 /** Reduces the number of frames to 10 */
-//#define SWAP_TEST 1
+#define SWAP_TEST 1
 #define BITS_PER_CHAR 8
 
 /** List elements used to maintain a list of the free frames */
