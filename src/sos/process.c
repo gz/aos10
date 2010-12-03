@@ -226,7 +226,7 @@ process* register_process(char* name) {
 }
 
 
-static void initialize() {
+static void initialize(void) {
 	dprintf(0, "asdfsadf\n");
 }
 
