@@ -9,19 +9,20 @@
 #include "io/io.h"
 #include "mm/pager.h"
 
+/** Process Descriptor entries */
 typedef struct proc {
-	L4_Bool_t is_active;
+	L4_Bool_t is_active;		/**< Determine if the process is active */
 
-	char command[N_NAME];
+	char command[N_NAME];		/**< Name of the executable */
 
-	L4_ThreadId_t tid;
-	L4_ThreadId_t wait_for;
+	L4_ThreadId_t tid;			/**< ID of the thread running the process */
+	L4_ThreadId_t wait_for;		/**< Used by process_wait calls */
 
-	L4_Word_t  size;
-	timestamp_t  start_time;
+	L4_Word_t  size;			/**< Used pages */
+	timestamp_t  start_time;	/**< Start time of the process */
 
-	file_table_entry* filetable[PROCESS_MAX_FILES];
-	page_table_entry* page_index;
+	file_table_entry* filetable[PROCESS_MAX_FILES];		/**< Filetable */
+	page_table_entry* page_index;						/**< 1st level page table */
 } process;
 
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);

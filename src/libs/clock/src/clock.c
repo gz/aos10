@@ -292,7 +292,7 @@ void remove_timers(L4_ThreadId_t tid) {
 		return;
 	}
 
-	// if the queue head belongs to this tid, simulate timer interrupt
+	// if the queue head belongs to this tid remove the head and restart the timer
 	// do this as long as the new queue head also belongs to this tid
 	while (L4_IsThreadEqual(timer_queue_head->owner,tid)) {
 		dprintf(0,"remove head of timer queue, belonging to tid = %d\n", tid.raw);

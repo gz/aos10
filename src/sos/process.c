@@ -89,7 +89,8 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 	// find process with matching tid in list
 	for (int i=0; i<MAX_RUNNING_PROCESS; i++) {
 		process* p = &ptable[i];
-		if(p != NULL && !L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
+
+		if(p->is_active && !L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
 			dprintf(0, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
 			send_ipc_reply(p->tid, SOS_PROCESS_WAIT, 1, tid2pid(finished_thread));
 			p->wait_for = L4_nilthread;
@@ -205,7 +206,7 @@ process* register_process(char* name) {
 		new_process->filetable[i] = NULL;
 	}
 
-	// initialize standard out file descriptor for our 1st process
+	// initialize standard out file descriptor
 	file_table_entry** file_table = new_process->filetable;
 	file_table[0] = malloc(sizeof(file_table_entry));
 	assert(file_table[0] != NULL);

@@ -56,7 +56,7 @@
 #include "swapper.h"
 #include "frames.h"
 
-#define verbose 0
+#define verbose 1
 
 /** Amount of bytes read/written from/to swap file per call */
 #define BATCH_SIZE 512
@@ -193,13 +193,17 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			if(page->to_swap == 0) {
 
 				dprintf(0, "page is swapped out\n");
-				frame_free(CLEAR_LOWER_BITS(pte->address));
-				mark_swapped(pte, page->swap_offset);
 
-				// restart the thread who ran out of memory
-				L4_Start(page->initiator);
+				if(page->awaits_callback) {
+					frame_free(CLEAR_LOWER_BITS(pte->address));
+					mark_swapped(pte, page->swap_offset);
+
+					// restart the thread who ran out of memory
+					send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
+				}
+				else {} // page was killed, nothing to do
+
 				free(page);
-
 				// Please Note: Since we don't share memory across
 				// processes it cannot happen that a page is written
 				// to while swapping out. So this case is not handled here.
@@ -243,6 +247,11 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
 	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 
+	if(!page->awaits_callback) {
+		free(page);
+		return;
+	}
+
 	switch (status) {
 		case NFS_OK:
 		{
@@ -254,8 +263,8 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 			// swapping in complete
 			if(page->to_swap == PAGESIZE) {
 				// restart the thread because the page is in memory again
-				L4_Start(page->tid);
 	    		TAILQ_INSERT_TAIL(&active_pages_head, page, entries);
+				send_ipc_reply(page->tid, L4_PAGEFAULT, 0);
 			}
 			else {
 				// read next batch
@@ -346,8 +355,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	if(page == NULL) {
 		return NO_PAGE_AVAILABLE;
 	}
-	assert(page != NULL && !is_referenced(page));
-	// TODO page == NULL can actually happen since we don't place the ipc frames in the queue
+	assert(!is_referenced(page));
 
 	// decide where in the swap file our page will be
 	if(page->swap_offset < 0 && (page->swap_offset = allocate_swap_entry()) < 0)
@@ -357,10 +365,10 @@ int swap_out(L4_ThreadId_t initiator) {
 
 	if(is_dirty(page)) {
 		dprintf(1, "Selected page is dirty, need to write to swap space\n");
-		L4_AbortIpc_and_stop_Thread(initiator); // stop the client thread since he has to wait until we swapped out
 
 		page->to_swap = PAGESIZE;
 		page->initiator = initiator;
+		page->awaits_callback = TRUE;
 
 		file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 		assert(swap_fd != NULL);
@@ -404,11 +412,10 @@ int swap_out(L4_ThreadId_t initiator) {
  */
 int swap_in(page_queue_item* page) {
 	assert(page != NULL);
-	L4_AbortIpc_and_stop_Thread(page->tid); // stop the client thread since he has to wait until we finished swapping in
-
 	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 	assert(swap_fd != NULL);
 
+	page->awaits_callback = TRUE;
 	page->to_swap = 0; // to keep track of how many bytes are read
 	nfs_read(&swap_fd->file->nfs_handle, page->swap_offset+page->to_swap, BATCH_SIZE, &swap_read_callback, (int)page);
 
