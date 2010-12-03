@@ -339,9 +339,13 @@ void swap_init() {
  * @return	SWAPPING_PENDING in case we need to write the page to the disk
  * 			SWAPPING_COMPLETE in case the page was not dirty
  * 			OUT_OF_SWAP_SPACE if our swap space is already full
+ * 			NO_PAGE_AVAILABLE if second_chance_select did not find a page
  */
 int swap_out(L4_ThreadId_t initiator) {
 	page_queue_item* page = second_chance_select(&active_pages_head);
+	if(page == NULL) {
+		return NO_PAGE_AVAILABLE;
+	}
 	assert(page != NULL && !is_referenced(page));
 	// TODO page == NULL can actually happen since we don't place the ipc frames in the queue
 

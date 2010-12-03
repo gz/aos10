@@ -295,9 +295,6 @@ L4_ThreadId_t sos_task_new(L4_ThreadId_t tid, L4_ThreadId_t pager, void *entrypo
 
 	int res;
 
-
-	dprintf(0, "new task, create space and shit\n");
-
 	// Create an inactive thread
 	res = L4_ThreadControl(tid, tid, root_thread_g, L4_nilthread, L4_anythread,
 			L4_anythread, (void *) -1);

@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 0
+#define verbose 3
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0
@@ -258,8 +258,17 @@ static void* allocate_new_frame(L4_ThreadId_t for_thread) {
 				assert(new_frame != 0);
 			break;
 
+			case NO_PAGE_AVAILABLE:
+				// This can happen if you have a lot of processes
+				// less or at most as many frames as processes
+				// Since every process has one frame allocated which never gets
+				// swapped it can happen that we use up all our frames
+				// for processes and end up with nothing to swap in/out
+				L4_KDB_Enter("Out of frames. Too few frames, too many processes?");
+			break;
+
 			case OUT_OF_SWAP_SPACE:
-				L4_KDB_Enter("Out of memory and swap space :-(\n");
+				L4_KDB_Enter("Out of memory and swap space :-(");
 			break;
 
 			default:

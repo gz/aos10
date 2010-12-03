@@ -282,8 +282,9 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
 
 /**
  * Removes all currently registred timers for a given thread.
- * @param tid
- * @return
+ * Resets timer in case head of the queue is removed.
+ *
+ * @param tid Thread ID telling us which timers to remove
  */
 void remove_timers(L4_ThreadId_t tid) {
 	// queue is empty, nothing to do

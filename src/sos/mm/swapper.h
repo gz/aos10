@@ -27,6 +27,7 @@ extern struct pages_head active_pages_head;
 #define SWAPPING_PENDING -1
 #define SWAPPING_COMPLETE -2
 #define OUT_OF_SWAP_SPACE -3
+#define NO_PAGE_AVAILABLE -4
 
 void swap_free(int);
 void swap_init(void);

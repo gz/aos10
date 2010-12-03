@@ -10,7 +10,7 @@ int main(void) {
 
 	/*char* buf = malloc(4096);
 	assert(buf != NULL);*/
-	/*char buf[4096];
+	char buf[4096];
 
 	int fd = open("swap", O_RDONLY);
 	assert(fd != -1);
@@ -18,10 +18,10 @@ int main(void) {
 
 	printf("Cool I read %d bytes from the swap file.\n", bytes_read);
 
-	for(int i=0; i<2; i++) {
+	for(int i=0; i<1; i++) {
 		printf("now sleep 1 sec\n");
 		sleep(1000);
 	}
 
-	printf("test_io is done now...\n");*/
+	printf("test_io is done now...\n");
 }

@@ -22,7 +22,7 @@
 #include "io_nfs.h"
 #include "io.h"
 
-#define verbose 1
+#define verbose 2
 
 
 /**
@@ -81,6 +81,7 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 
 			if(!L4_IsNilThread(fi->reader))
 				open_nfs(fi, fi->reader, mode);
+
 		}
 		break;
 

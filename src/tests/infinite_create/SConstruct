@@ -1,0 +1,6 @@
+Import("*")
+
+sources=Split("infinite_create.c")
+obj = env.MyProgram("tic", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+
+Return("obj")
