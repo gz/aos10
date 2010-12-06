@@ -25,6 +25,13 @@ pid_t process_create(const char *path) {
 }
 
 
+int process_start() {
+	L4_Msg_t msg;
+	system_call(SOS_PROCESS_START, &msg, 0);
+	return 0;
+}
+
+
 int process_delete(pid_t pid) {
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_DELETE, &msg, 1, pid);

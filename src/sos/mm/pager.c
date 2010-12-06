@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 1
+#define verbose 3
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0
@@ -101,6 +101,10 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 	// User space physical memory permission
 	if(addr < VIRTUAL_START)
 		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
+
+	// ELF binary
+	if(addr >= ELF_START && addr < ELF_END)
+		return L4_FullyAccessible;
 
 	// Heap permissions
 	if(addr >= HEAP_START && addr < HEAP_END)

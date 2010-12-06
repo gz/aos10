@@ -18,6 +18,9 @@ typedef struct page_entry {
 #define ONE_MEGABYTE (1024*1024)
 #define VIRTUAL_START 0x2000000
 
+#define ELF_START VIRTUAL_START
+#define ELF_END (VIRTUAL_START + 4*ONE_MEGABYTE)
+
 #define STACK_TOP 0xC0000000
 #define STACK_END (STACK_TOP - ONE_MEGABYTE)
 

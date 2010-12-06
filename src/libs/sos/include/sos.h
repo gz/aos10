@@ -80,6 +80,14 @@ pid_t process_create(const char *path);
 
 
 /**
+ * This is an internal syscall used by the initializer after the ELF file has been loaded
+ * into memory to tell the SOS server to start the binary. This syscall is only invoked
+ * once (not by the user) after that it will no longer work and always return -1.
+ */
+int process_start(void);
+
+
+/**
  * Delete process (and close all its file descriptors).
  * Returns 0 if successful, -1 otherwise (invalid process).
  */

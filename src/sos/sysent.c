@@ -58,6 +58,7 @@ void init_systable() {
 	register_syscall(SOS_TIMESTAMP, &send_timestamp);
 
 	register_syscall(SOS_PROCESS_CREATE, &create_process);
+	register_syscall(SOS_PROCESS_START, &start_process);
 	register_syscall(SOS_PROCESS_DELETE, &delete_process);
 	register_syscall(SOS_PROCESS_ID, &get_pid);
 	register_syscall(SOS_PROCESS_WAIT, &wait_process);

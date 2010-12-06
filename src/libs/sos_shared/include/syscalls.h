@@ -22,16 +22,17 @@
 
 // Process Syscall Labels
 #define SOS_PROCESS_CREATE 	 6
-#define SOS_PROCESS_DELETE 	 7
-#define SOS_PROCESS_ID 		 8
-#define SOS_PROCESS_STATUS 	 9
-#define SOS_PROCESS_WAIT 	10
+#define SOS_PROCESS_START 	 7
+#define SOS_PROCESS_DELETE 	 8
+#define SOS_PROCESS_ID 		 9
+#define SOS_PROCESS_STATUS 	10
+#define SOS_PROCESS_WAIT 	11
 
 // IO Syscall Labels
-#define SOS_SLEEP 			11
-#define SOS_TIMESTAMP 		12
+#define SOS_SLEEP 			12
+#define SOS_TIMESTAMP 		13
 
 // Debug Syscall Labels
-#define SOS_UNMAP_ALL		13
+#define SOS_UNMAP_ALL		14
 
 #endif /* SYSCALLS_H_ */

@@ -11,6 +11,7 @@
 
 /** Process Descriptor entries */
 typedef struct proc {
+	L4_Bool_t initialized;		/**< Set when ELF binary has been loaded and process code is being executed */
 	L4_Bool_t is_active;		/**< Determine if the process is active */
 
 	char command[N_NAME];		/**< Name of the executable */
@@ -26,6 +27,7 @@ typedef struct proc {
 } process;
 
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int start_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int wait_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_pid(L4_ThreadId_t, L4_Msg_t*, data_ptr);
