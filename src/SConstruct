@@ -73,7 +73,7 @@ app8 = app_env.Application("tests/max_concurrent_process")
 
 # Bootimage takes a comma seperated list of Applications that are linked
 # together into a single bootimg.bin binary.
-bootimg = env.Bootimage(l4kernel, sos)
+bootimg = env.Bootimage(l4kernel, sos, app1, app2)
 
 Default(bootimg, app1, app2, app3, app4, app5, app6, app7, app8) # Default build target is the bootimage.
 

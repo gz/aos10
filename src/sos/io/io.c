@@ -108,7 +108,7 @@ inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
  * @param name of file to search for
  * @return index in file_cache or -1 if not found
  */
-static int find_file(data_ptr name) {
+int find_file(data_ptr name) {
 
 	for(int i=0; i<DIR_CACHE_SIZE; i++) {
 		if(strcmp(file_cache[i]->filename, name) == 0)

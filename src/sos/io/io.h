@@ -64,5 +64,6 @@ int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 fildes_t find_free_file_slot(file_table_entry**);
 int file_cache_insert(file_info*);
 file_table_entry* create_file_descriptor(file_info*, L4_ThreadId_t, fmode_t);
+int find_file(data_ptr);
 
 #endif /* IO_H_ */
