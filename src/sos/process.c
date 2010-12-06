@@ -28,7 +28,6 @@ static L4_Word_t next_task;
 /** Table containing currently running processes */
 static process ptable[MAX_RUNNING_PROCESS];
 
-static char* elfFile;
 
 /**
  * Finds a executable placed within in the bootimage file.
@@ -154,7 +153,6 @@ void process_init() {
 	// add root process as first process in table
 	register_process("[sos]");
 	ptable[0].tid = root_thread_g;
-
 }
 
 
@@ -228,17 +226,6 @@ process* register_process(char* name) {
 }
 
 
-static void initialize(void) {
-	dprintf(0, "asdfsadf\n");
-
-
-	int idx = find_file("sosh");
-	//nfs_read(file_cache[idx]->nfs_handle, 0, 512, &elf_read_callback, );
-
-	//elf_loadFile(elfFile, 0x1000);
-	//L4_Start_SpIp(L4_Myself(), 0xC0000000, 0x1000);
-}
-
 /**
  * Syscall handler for creating a process. This will perform the following steps:
  * 1. Find the executable in the boot image
@@ -270,8 +257,7 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		L4_ThreadId_t newtid = sos_task_new(
 				pentry->tid,
 				root_thread_g,
-				//(void *) L4_SimpleExec_TextVstart(boot_record), //0x1000,
-				(void*) initialize,
+				(void *) L4_SimpleExec_TextVstart(boot_record),
 				(void *) 0xC0000000,
 				L4_Version(pentry->tid) == 1
 		);

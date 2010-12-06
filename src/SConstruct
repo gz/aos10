@@ -50,7 +50,7 @@ sos = rootserver_env.Application("sos");
 
 # Use the app_env environment for building everything else that will run in the
 # userland context.  Can't add libs/sos 'cause it doesn't exist yet.
-app_env=env.Copy("userland", LINKFLAGS=["-Ttext=0x1000"])
+app_env=env.Copy("userland", LINKFLAGS=["-r"])
 app_env.AddLibrary("l4")
 app_env.AddLibrary("c", system="sos")
 app_env.AddLibrary("elf")
@@ -60,8 +60,6 @@ app_env.AddLibrary("sos")
 # Once you get to the later milestones you will be writing lots of little test
 # tools that need to get loaded and run in your context.  Do that by calling
 # the Application function a number times in the app_env environment.
-#initialize_app = app_env.Application("initializer")
-
 app1 = app_env.Application("sosh")
 app2 = app_env.Application("tests/io")
 app3 = app_env.Application("tests/infinite_processes")
@@ -73,8 +71,8 @@ app8 = app_env.Application("tests/max_concurrent_process")
 
 # Bootimage takes a comma seperated list of Applications that are linked
 # together into a single bootimg.bin binary.
-bootimg = env.Bootimage(l4kernel, sos, app1, app2)
+bootimg = env.Bootimage(l4kernel, sos, app1, app2, app3, app4, app5, app6, app7, app8)
 
-Default(bootimg, app1, app2, app3, app4, app5, app6, app7, app8) # Default build target is the bootimage.
+Default(bootimg) # Default build target is the bootimage.
 
 # vim:ft=python:
