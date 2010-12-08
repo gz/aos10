@@ -52,7 +52,6 @@ void sos_debug_flush(void) {
 
 }
 
-
 void abort(void) {
 	while(1); /* We don't return after this */
 }

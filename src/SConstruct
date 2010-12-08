@@ -59,7 +59,7 @@ initializer = app_boot_env.Application("initializer")
 # Use the app_env environment for building everything else that will run in the
 # userland context.  Can't add libs/sos 'cause it doesn't exist yet.
 # app_env=env.Copy("userland", LINKFLAGS=["-r"])
-app_env=env.Copy("userland", LINKFLAGS=["-Ttext=0x02000000"])
+app_env=env.Copy("userland", LINKFLAGS=["-Ttext=0x02000000", "-Tdata=0x02400000"])
 app_env.AddLibrary("l4")
 app_env.AddLibrary("c", system="sos")
 app_env.AddLibrary("elf")

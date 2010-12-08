@@ -199,7 +199,7 @@ process* register_process(char* name) {
 	strcpy(new_process->command, name);
 	new_process->wait_for = L4_nilthread;
 	new_process->size = 1; // TODO in elf loading replace this with binary page size
-	new_process->start_time = time_stamp();
+	new_process->start_time = get_time_stamp();
 	new_process->tid.global.X.version = 1; // TODO why is this not working with increasing version number?
 	new_process->is_active = TRUE;
 	new_process->initialized = FALSE;
@@ -248,6 +248,7 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	char name[N_NAME+1];
 	memcpy(name, buf, N_NAME);
 	name[N_NAME] = '\0';
+	dprintf(0, "create process:%s\n", name);
 
 	L4_BootRec_t* boot_record = find_boot_executable("initializer");
 
@@ -282,10 +283,19 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	p->initialized = TRUE;
 
 	dprintf(0, "starting process:0x%X at %X\n", tid, ELF_START);
-	//L4_AbortIpc_and_stop(tid);
+	L4_AbortIpc_and_stop_Thread(tid);
 	L4_CacheFlushAll();
 
 	L4_Start_SpIp(tid, STACK_TOP, ELF_START);
+
+	/*tid = sos_task_new(
+			tid,
+			root_thread_g,
+			(void *) ELF_START,
+			(void *) STACK_TOP,
+			FALSE
+	);*/
+
 	return 0;
 }
 
@@ -432,7 +442,7 @@ int get_process_status(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 			strcpy(process_desc_ptr->command, p->command);
 			process_desc_ptr->pid = tid2pid(p->tid);
 			process_desc_ptr->size = p->size;
-			process_desc_ptr->stime = (unsigned) ((time_stamp() - p->start_time) / 1000);
+			process_desc_ptr->stime = (unsigned) ((get_time_stamp() - p->start_time) / 1000);
 			process_desc_ptr->ctime = 0;
 
 			if(++added == max_processes)

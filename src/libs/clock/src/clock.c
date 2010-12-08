@@ -195,7 +195,7 @@ int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 
 	// set timer to next alarm or if they're already due we call their alarm function
 	while(timer_queue_head != NULL) {
-			timestamp_t delay = timer_queue_head->expiration_time - time_stamp();
+			timestamp_t delay = timer_queue_head->expiration_time - get_time_stamp();
 
 			if( ((int64_t) delay) <= 500) { // TODO: is 500 a good value?
 				alarm_timer* alarm = timer_queue_pop();
@@ -261,7 +261,7 @@ int register_timer(uint64_t delay, L4_ThreadId_t client) {
 	new_alarm->alarm_function = &wakeup;
 	new_alarm->owner = client;
 	new_alarm->next_alarm = NULL;
-	new_alarm->expiration_time = time_stamp() + delay;
+	new_alarm->expiration_time = get_time_stamp() + delay;
 
 	//dprintf(0, "new_alarm->expiration_time:%llu\ntimer_queue_head->expiration_time:%llu\n", new_alarm->expiration_time, timer_queue_head->expiration_time);
 	// disable interrupts while modifying the queue
@@ -301,7 +301,7 @@ void remove_timers(L4_ThreadId_t tid) {
 
 		if(timer_queue_head != NULL) {
 			// restart with delay of new head
-			timestamp_t delay = max(timer_queue_head->expiration_time - time_stamp(), 1);
+			timestamp_t delay = max(timer_queue_head->expiration_time - get_time_stamp(), 1);
 			TIMER0_SET(MICROSECONDS_TO_TICKS(delay));
 			TIMER0_START();
 		}
@@ -327,7 +327,7 @@ void remove_timers(L4_ThreadId_t tid) {
 /**
  * @return The microseconds since booting.
  */
-timestamp_t time_stamp(void) {
+timestamp_t get_time_stamp(void) {
 	if(!driver_initialized)
 		return CLOCK_R_UINT;
 
@@ -401,7 +401,7 @@ int sleep_timer(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
  * @return 1 since we wan't to return to the client immediately
  */
 int send_timestamp(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr ipc_memory) {
-	timestamp_t uptime = time_stamp();
+	timestamp_t uptime = get_time_stamp();
 	return set_ipc_reply(msg_p, 2, GET_LOW(uptime), GET_HIGH(uptime));
 }
 

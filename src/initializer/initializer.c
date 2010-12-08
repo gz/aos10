@@ -1,8 +1,7 @@
-#include <assert.h>
 #include <sos.h>
 #include <elf/elf.h>
 
-static char elf_buffer[4096*27];
+static char elf_buffer[4096*35];
 
 int main(void) {
 	printf("haiu Im teh initializer\n");
@@ -25,4 +24,7 @@ int main(void) {
 
 	process_start();
 	//L4_Start_SpIp(L4_Myself(), 0xC0000000, 0x1000);
+
+	return 0;
 }
+

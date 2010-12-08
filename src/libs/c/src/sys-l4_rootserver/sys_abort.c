@@ -79,6 +79,7 @@
 #include <stdlib.h>
 #include <l4/kdebug.h>
 
+#define ABORT 1
 void
 abort(void)
 {

@@ -53,7 +53,7 @@ void remove_timers(L4_ThreadId_t tid);
  *
  * Returns a negative value if failure.
  */
-timestamp_t time_stamp(void);
+timestamp_t get_time_stamp(void);
 
 /*
  * Stop clock driver operation.
