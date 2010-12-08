@@ -145,6 +145,8 @@ static __inline__ void syscall_loop(void)
 			{
 				if(sysent[sysnr] != NULL) {
 					data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
+					dprintf(0, "ipc_memory physical location is: %p\n", ipc_memory);
+					dprintf(0, "ipc_memory_content is: %c\n", ipc_memory[0]);
 					reply = sysent[sysnr](tid, &msg, ipc_memory);
 				}
 				else {

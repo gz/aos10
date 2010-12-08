@@ -7,10 +7,17 @@
 #include "tty.h"
 
 #include <l4/types.h>
+#include <l4/kdebug.h>
 
 
 size_t sos_write(const void *vData, long int position, size_t count, void *handle) {
-	return write(stdout_fd, vData, count);
+	//return write(stdout_fd, vData, count);
+
+    size_t i;
+    const char *realdata = vData;
+    for (i = 0; i < count; i++)
+            L4_KDB_PrintChar(realdata[i]);
+    return count;
 }
 
 

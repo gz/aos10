@@ -4,12 +4,24 @@
 
 #include <sos.h>
 
+
+
 int main(void) {
-	printf("Hello World\n");
-	printf("I'm test_io\n");
+	putchar('z');
+	putchar('b');
+	putchar('c');
+	putchar('d');
+	putchar('e');
+	putchar('f');
+	putchar('g');
+
+
+
+	//printf("Hello World\n");
+//	printf("I'm test_io\n");
 
 	/*char* buf = malloc(4096);
-	assert(buf != NULL);*/
+	assert(buf != NULL);
 	char buf[4096];
 
 	int fd = open("swap", O_RDONLY);
@@ -23,5 +35,5 @@ int main(void) {
 		sleep(1000);
 	}
 
-	printf("test_io is done now...\n");
+	printf("test_io is done now...\n");*/
 }

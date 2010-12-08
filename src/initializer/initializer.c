@@ -4,15 +4,15 @@
 static char elf_buffer[4096*35];
 
 int main(void) {
-	printf("haiu Im teh initializer\n");
+	printf("initializer\n");
 
 
-	int fd = open("sosh", O_RDONLY);
+	int fd = open("tio", O_RDONLY);
 	int bytes_read = 0;
 
 	data_ptr copy_to = elf_buffer;
 
-	printf("copy some filez\n");
+	printf("copy some file\n");
 	while( (bytes_read = read(fd, copy_to, 512)) ) {
 		copy_to += bytes_read;
 	}

@@ -82,6 +82,6 @@ app8 = app_env.Application("tests/max_concurrent_process")
 # together into a single bootimg.bin binary.
 bootimg = env.Bootimage(l4kernel, sos, initializer)
 
-Default(bootimg, app1) # Default build target is the bootimage.
+Default(bootimg, app1, app2) # Default build target is the bootimage.
 
 # vim:ft=python:
