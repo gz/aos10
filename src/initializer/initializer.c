@@ -9,7 +9,7 @@ int main(void) {
 
 	printf("loading: %s\n", filename);
 
-	int fd = open(filename, O_RDONLY);
+	int fd = open("sosh", O_RDONLY);
 	int bytes_read = 0;
 
 	data_ptr copy_to = elf_buffer;

@@ -144,8 +144,15 @@ static __inline__ void syscall_loop(void)
 			case 0 ... SYSENT_SIZE-1:
 			{
 				if(sysent[sysnr] != NULL) {
-					L4_CacheFlushAll();
+					//L4_CacheFlushAll();
 					data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
+
+					// Construct fpage IPC message
+					L4_Fpage_t targetFpage = L4_FpageLog2((L4_Word_t)ipc_memory, 12);
+					L4_Set_Rights(&targetFpage, L4_FullyAccessible);
+					L4_PhysDesc_t phys = L4_PhysDesc((L4_Word_t)ipc_memory, L4_UncachedMemory);
+					L4_MapFpage(root_thread_g, targetFpage, phys);
+
 					reply = sysent[sysnr](tid, &msg, ipc_memory);
 				}
 				else {

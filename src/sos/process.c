@@ -476,8 +476,8 @@ int get_executable_name(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(p == NULL || buf == NULL || p->initialized)
 		return IPC_SET_ERROR(-1);
 
+
 	strcpy(buf, p->command);
-	L4_CacheFlushAll();
 	return set_ipc_reply(msg_p, 1, 0);
 }
 

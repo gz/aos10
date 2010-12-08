@@ -39,6 +39,7 @@
 #include <assert.h>
 #include <l4/ipc.h>
 #include <l4/schedule.h>
+#include <l4/cache.h>
 
 #include "../mm/pager.h"
 #include "../mm/swapper.h"

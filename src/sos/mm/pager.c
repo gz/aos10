@@ -357,7 +357,11 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// else page just isn't mapped in hardware
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, requested_access);
-	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_DefaultMemory);
+	L4_PhysDesc_t phys;
+	if(addr != (L4_Word_t)ipc_memory_start)
+		phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_DefaultMemory);
+	else
+		phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_UncachedMemory);
 
 	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS(second_entry->address));
 	return L4_MapFpage(tid, targetFpage, phys);
