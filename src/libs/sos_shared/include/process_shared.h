@@ -6,6 +6,7 @@
 // Error returns for process_create syscall (server side)
 #define EXECUTABLE_NOT_FOUND -1
 #define PROCESS_TABLE_FULL -2
+#define FILE_NOT_EXECUTABLE -3
 
 typedef int pid_t;
 

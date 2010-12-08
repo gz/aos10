@@ -4,10 +4,12 @@
 static char elf_buffer[4096*35];
 
 int main(void) {
-	printf("initializer\n");
+	char filename[N_NAME];
+	process_get_name(filename);
 
+	printf("loading: %s\n", filename);
 
-	int fd = open("tio", O_RDONLY);
+	int fd = open(filename, O_RDONLY);
 	int bytes_read = 0;
 
 	data_ptr copy_to = elf_buffer;
@@ -23,7 +25,6 @@ int main(void) {
 	printf("end elf_loadFile enter at:0x%llX\n", elf_getEntryPoint(elf_buffer));
 
 	process_start();
-	//L4_Start_SpIp(L4_Myself(), 0xC0000000, 0x1000);
 
 	return 0;
 }

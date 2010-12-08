@@ -29,7 +29,7 @@
 
 #include "../libs/c/src/k_r_malloc.h"
 
-#define verbose 2
+#define verbose 1
 
 #define ONE_MEG	    (1 * 1024 * 1024)
 #define HEAP_SIZE   ONE_MEG*4 /* 4 MB heap */
@@ -144,9 +144,8 @@ static __inline__ void syscall_loop(void)
 			case 0 ... SYSENT_SIZE-1:
 			{
 				if(sysent[sysnr] != NULL) {
+					L4_CacheFlushAll();
 					data_ptr ipc_memory = pager_physical_lookup(tid, (L4_Word_t)ipc_memory_start);
-					dprintf(0, "ipc_memory physical location is: %p\n", ipc_memory);
-					dprintf(0, "ipc_memory_content is: %c\n", ipc_memory[0]);
 					reply = sysent[sysnr](tid, &msg, ipc_memory);
 				}
 				else {

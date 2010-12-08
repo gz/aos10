@@ -32,6 +32,7 @@ int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int wait_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_pid(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int get_process_status(L4_ThreadId_t, L4_Msg_t*, data_ptr);
+int get_executable_name(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf);
 
 void process_init(void);
 process* get_process(L4_ThreadId_t tid);

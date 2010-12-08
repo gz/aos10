@@ -155,6 +155,8 @@ void process_init() {
 	// add root process as first process in table
 	register_process("[sos]");
 	ptable[0].tid = root_thread_g;
+	free(ptable[0].page_index);
+	ptable[0].page_index = NULL;
 }
 
 
@@ -248,11 +250,22 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	char name[N_NAME+1];
 	memcpy(name, buf, N_NAME);
 	name[N_NAME] = '\0';
-	dprintf(0, "create process:%s\n", name);
+	dprintf(0, "name is:%s\n", name);
+	int file_cache_index = find_file(name);
+
+	if(file_cache_index == -1) {
+		dprintf(0, "The file you're trying to execute has no executable rights.\n");
+
+		return IPC_SET_ERROR(EXECUTABLE_NOT_FOUND);
+	}
+	else if(! (file_cache[file_cache_index]->status.st_fmode & FM_EXEC) ) {
+		dprintf(0, "The file you're trying to execute has no executable rights.\n");
+		return IPC_SET_ERROR(FILE_NOT_EXECUTABLE);
+	}
 
 	L4_BootRec_t* boot_record = find_boot_executable("initializer");
 
-	if(boot_record != NULL) {
+	if(boot_record != NULL && file_cache_index != -1) {
 		// Start a new task with this program
 		process* pentry = register_process(name);
 		if(pentry == NULL)
@@ -270,7 +283,8 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return set_ipc_reply(msg_p, 1, tid2pid(newtid));
 	}
 
-	return IPC_SET_ERROR(EXECUTABLE_NOT_FOUND); // executable not found
+	assert("Initializer not found in bootimg.bin. Check SConstruct!");
+	return IPC_SET_ERROR(-1);
 }
 
 
@@ -282,19 +296,9 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	p->initialized = TRUE;
 
-	dprintf(0, "starting process:0x%X at %X\n", tid, ELF_START);
-	L4_AbortIpc_and_stop_Thread(tid);
-	L4_CacheFlushAll();
-
+	//L4_AbortIpc_and_stop_Thread(tid);
+	//L4_CacheFlushAll();
 	L4_Start_SpIp(tid, STACK_TOP, ELF_START);
-
-	/*tid = sos_task_new(
-			tid,
-			root_thread_g,
-			(void *) ELF_START,
-			(void *) STACK_TOP,
-			FALSE
-	);*/
 
 	return 0;
 }
@@ -454,3 +458,26 @@ int get_process_status(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	return set_ipc_reply(msg_p, 1, added);
 }
+
+
+/**
+ * Syscall handler returns the name of the executable of a given process
+ * this call only works during initialization phase and should not be used
+ * by clients.
+ *
+ * @param tid Calle Thread ID
+ * @param msg_p IPC Message
+ * @param buf Shared IPC memory
+ * @return send empty message back
+ */
+int get_executable_name(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	process* p = get_process(tid);
+
+	if(p == NULL || buf == NULL || p->initialized)
+		return IPC_SET_ERROR(-1);
+
+	strcpy(buf, p->command);
+	L4_CacheFlushAll();
+	return set_ipc_reply(msg_p, 1, 0);
+}
+

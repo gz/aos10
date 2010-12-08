@@ -524,6 +524,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 				free(page);
 			}
     		else {
+    			// page is freed later in corresponding nfs swap callback (see swapper.c)
     			page->awaits_callback = FALSE;
     		}
 

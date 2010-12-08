@@ -57,6 +57,7 @@ static char read_buffer[READ_BUFFER_SIZE];
 static circular_buffer console_circular_buffer;
 
 // Cache for directory entries
+L4_Bool_t file_cache_initialized = FALSE;
 static int file_cache_next_entry = 0;
 file_info* file_cache[DIR_CACHE_SIZE];
 
@@ -108,7 +109,7 @@ inline static L4_Bool_t can_close(L4_ThreadId_t tid, fildes_t fd) {
  * @param name of file to search for
  * @return index in file_cache or -1 if not found
  */
-static int find_file(data_ptr name) {
+int find_file(data_ptr name) {
 
 	for(int i=0; i<DIR_CACHE_SIZE; i++) {
 		if(strcmp(file_cache[i]->filename, name) == 0)
@@ -203,6 +204,11 @@ void io_init() {
 
 	// Set up dir cache with files from NFS directory
 	nfs_readdir(&mnt_point, 0, MAX_PATH_LENGTH, &nfs_readdir_callback, 0);
+
+	// Wait until file cache is set up to avoid problems
+	while(!file_cache_initialized) {
+		sos_usleep(100);
+	}
 }
 
 

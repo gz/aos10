@@ -298,6 +298,13 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 				fi->reader = L4_anythread;
 				fi->creation_pending = TRUE;
 
+				// reset status
+				fi->status.st_atime = 0;
+				fi->status.st_ctime = 0;
+				fi->status.st_fmode = FM_EXEC;
+				fi->status.st_size = 0;
+				fi->status.st_type = 0;
+
 				nfs_lookup(&mnt_point, fi->filename, &nfs_set_status, (int)fi);
 			} // else ignore ., .., swap
 
@@ -309,6 +316,9 @@ void nfs_readdir_callback(uintptr_t token, int status, int num_entries, struct n
 
 	if(next_cookie > 0) {
 		nfs_readdir(&mnt_point, next_cookie, MAX_PATH_LENGTH, &nfs_readdir_callback, 0);
+	}
+	else {
+		file_cache_initialized = TRUE;
 	}
 
 }

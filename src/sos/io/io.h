@@ -31,7 +31,7 @@ typedef struct finfo {
 
 #define DIR_CACHE_SIZE 0x100
 extern file_info* file_cache[DIR_CACHE_SIZE];	/**< used to store all file information */
-
+extern L4_Bool_t file_cache_initialized; 		/**< because we need to wait until nfs callback has set-up the cache */
 
 /**
  * Information we track for open files.
@@ -64,5 +64,6 @@ int get_dirent(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 fildes_t find_free_file_slot(file_table_entry**);
 int file_cache_insert(file_info*);
 file_table_entry* create_file_descriptor(file_info*, L4_ThreadId_t, fmode_t);
+int find_file(data_ptr);
 
 #endif /* IO_H_ */

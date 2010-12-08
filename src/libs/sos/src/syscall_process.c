@@ -25,13 +25,6 @@ pid_t process_create(const char *path) {
 }
 
 
-int process_start() {
-	L4_Msg_t msg;
-	system_call(SOS_PROCESS_START, &msg, 0);
-	return 0;
-}
-
-
 int process_delete(pid_t pid) {
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_DELETE, &msg, 1, pid);
@@ -74,4 +67,27 @@ pid_t process_wait(pid_t pid) {
 	assert(L4_UntypedWords(tag) == 1);
 
 	return 0;
+}
+
+
+int process_start() {
+	L4_Msg_t msg;
+	system_call(SOS_PROCESS_START, &msg, 0);
+	return 0;
+}
+
+
+int process_get_name(char* name) {
+	ipc_memory_start[0] = 's'; // make sure the memory is mapped somewhere
+
+	L4_Msg_t msg;
+	L4_MsgTag_t tag = system_call(SOS_PROCESS_GET_NAME, &msg, 0);
+	printf("got words:%ld\n",(L4_Word_t) L4_UntypedWords(tag));
+	assert(L4_UntypedWords(tag) == 1);
+
+	int ret = L4_MsgWord(&msg, 0);
+	if(ret == 0)
+		strcpy(name, ipc_memory_start);
+
+	return ret;
 }

@@ -63,6 +63,7 @@ void init_systable() {
 	register_syscall(SOS_PROCESS_ID, &get_pid);
 	register_syscall(SOS_PROCESS_WAIT, &wait_process);
 	register_syscall(SOS_PROCESS_STATUS, &get_process_status);
+	register_syscall(SOS_PROCESS_GET_NAME, &get_executable_name);
 
 	register_syscall(SOS_UNMAP_ALL, &pager_unmap_all);
 }

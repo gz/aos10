@@ -4,7 +4,7 @@ TLA         = baz
 TFTPROOT    = /tftpboot
 TARGET      = $(TFTPROOT)/bootimg.bin
 SCONSRESULT = build/bootimg.bin
-
+ELF_BASE    = build/userland/
 
 ifeq ($(OS), Darwin)
     SERIAL_PORT = $(firstword $(wildcard /dev/cu.usbserial-*))
@@ -31,6 +31,7 @@ on off up down reset:
 $(TARGET): $(SCONSRESULT)
 	mkdir -p $(TFTPROOT)
 	cp $(SCONSRESULT) $(TARGET) || true
+	cp `find $(ELF_BASE) -depth -executable -type f | grep -v ".reloc"` $(TFTPROOT) || true
 
 $(SCONSRESULT): on tools
 	$(SCONS)
