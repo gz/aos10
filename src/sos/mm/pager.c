@@ -83,7 +83,7 @@ for(int i=0; i<4096; i++) {
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
 
-static void check_pager_invariants(void);
+//static void check_pager_invariants(void);
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -386,14 +386,14 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 {
 	assert( ((short) L4_Label(msgP->tag) >> 4) ==  L4_PAGEFAULT); // make sure pager is only called in page fault context
-	check_pager_invariants();
+	//check_pager_invariants();
 
     // Get fault information
     L4_Word_t addr = L4_MsgWord(msgP, 0);
     L4_Word_t ip = L4_MsgWord(msgP, 1);
     L4_Word_t fault_reason = L4_Label(msgP->tag) & 0xF; // permissions are stored in lower 4 bit of label
 
-	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid.global.X.thread_no, ip, addr, fault_reason);
+	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
 
 	if(!is_access_granted(tid, addr, fault_reason)) {
 		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.\n", tid, addr, fault_reason, get_access_rights(tid, addr));
@@ -665,7 +665,7 @@ page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 
 
 
-
+/*
 static void check_pager_invariants() {
 
 	// Verify pagetables of all currently running processes
@@ -711,7 +711,7 @@ static void check_pager_invariants() {
 						    }
 
 						}
-						/*else if(pte->address_ptr != NULL && virtual_address != (L4_Word_t)ipc_memory_start) {
+						else if(pte->address_ptr != NULL && virtual_address != (L4_Word_t)ipc_memory_start) {
 							L4_Bool_t found = FALSE;
 						    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
 						    	if(L4_IsThreadEqual(page->tid, p->tid) && page->virtual_address == virtual_address) {
@@ -723,7 +723,7 @@ static void check_pager_invariants() {
 						    	dprintf(0, "virtual_address:0x%X not in queue! pte->address is:%u\n", virtual_address, pte->address);
 						    	assert(FALSE);
 						    }
-						}*/
+						}
 
 					}
 
@@ -737,4 +737,4 @@ static void check_pager_invariants() {
 
 
 
-}
+}*/

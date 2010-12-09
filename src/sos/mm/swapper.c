@@ -190,27 +190,37 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			page->to_swap -= BATCH_SIZE;
 
 			// swapping complete, can we now finally free the frame?
-			if(page->to_swap == 0) {
+			if(!is_referenced(page)) {
+				if(page->to_swap == 0) {
 
-				dprintf(0, "page is swapped out\n");
+					dprintf(0, "page is swapped out\n");
 
-				if(page->awaits_callback) {
-					dprintf(0,"freed frame: 0x%X\n", pte->address);
-					frame_free(CLEAR_LOWER_BITS(pte->address));
-					mark_swapped(pte, page->swap_offset);
+					if(page->awaits_callback) {
+						dprintf(0,"freed frame: 0x%X\n", pte->address);
+						frame_free(CLEAR_LOWER_BITS(pte->address));
+						mark_swapped(pte, page->swap_offset);
 
-					dprintf(0,"swap_write_callback pte->address:%u\n", pte->address);
-					// restart the thread who ran out of memory
-					send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
-				}
-				else {} // page was killed, nothing to do
+						dprintf(0,"swap_write_callback pte->address:%u\n", pte->address);
+						// restart the thread who ran out of memory
+						send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
+					}
+					else {} // page was killed, nothing to do
 
-				free(page);
-				// Please Note: Since we don't share memory across
-				// processes it cannot happen that a page is written
-				// to while swapping out. So this case is not handled here.
+					free(page);
+					// Please Note: Since we don't share memory across
+					// processes it cannot happen that a page is written
+					// to while swapping out. So this case is not handled here.
 
-			} // else: not everything has been swapped yet...
+				} // else: not everything has been swapped yet...
+			}
+			else {
+				page->initiator = L4_nilthread;
+
+	    		TAILQ_INSERT_TAIL(&active_pages_head, page, entries); // insert at front
+	    		if(page->awaits_callback)
+	    			send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
+				page->awaits_callback = FALSE;
+			}
 
 		}
 		break;
