@@ -297,14 +297,22 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int err = L4_MsgWord(msg_p, 0);
 
 	if (err) {
+		// unmap and free heap memory region
+		//pager_unmap_range(...);
+		//pager_free_range(...);
+
 		p->initialized = TRUE;
 
-		//L4_AbortIpc_and_stop_Thread(tid);
+		//L4_AbortIpc_and_stop_Thrbufbufead(tid);
 		//L4_CacheFlushAll();
 		L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
 	}
 	else {
-
+		// could not load elf file, delete process (with staged IPC message contents)
+		L4_Msg_t msg;
+		L4_MsgAppendWord(&msg, tid2pid(tid));
+		delete_process(tid,&msg,NULL);
+		dprintf(0,"process has been deleted again, because elf file could not be loaded\n");
 	}
 
 	return 0;
