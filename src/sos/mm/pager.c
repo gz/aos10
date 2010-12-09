@@ -515,7 +515,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 					swap_free(CLEAR_LOWER_BITS(pte->address));
 				}
 
-				if(pte->address_ptr != NULL) {
+				else if(pte->address_ptr != NULL) {
 					dprintf(0, "pager free frame:%d\n", pte->address);
 					frame_free(CLEAR_LOWER_BITS(pte->address));
 				}
@@ -575,7 +575,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 						swap_free(CLEAR_LOWER_BITS(pte->address));
 					}
 
-					if(pte->address_ptr != NULL) {
+					else if(pte->address_ptr != NULL) {
 						dprintf(0, "pager free frame:0x%X virtual:0x%X\n", pte->address, virtual_address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 					}
