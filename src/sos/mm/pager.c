@@ -576,7 +576,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 					}
 
 					if(pte->address_ptr != NULL) {
-						dprintf(0, "pager free frame:%d\n", pte->address);
+						dprintf(0, "pager free frame:%d virtual:%u\n", pte->address, virtual_address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 					}
 
