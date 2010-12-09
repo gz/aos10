@@ -25,7 +25,6 @@ int main(void) {
 		copy_to += bytes_read;
 	}
 	int err = elf_loadFile(elf_buffer, 0);
-	err = 0;
 
 	printf("end elf_loadFile enter at:0x%llX\n", elf_getEntryPoint(elf_buffer));
 	process_start(err);

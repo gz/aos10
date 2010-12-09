@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 1
+#define verbose 4
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0
@@ -536,7 +536,7 @@ void pager_free_all(L4_ThreadId_t tid) {
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid)) {
-    		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
+    		dprintf(0, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
 
     		if(!page->awaits_callback) {
 				TAILQ_REMOVE(&active_pages_head, page, entries);
@@ -576,7 +576,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 					}
 
 					if(pte->address_ptr != NULL) {
-						dprintf(0, "pager free frame:%d virtual:%u\n", pte->address, virtual_address);
+						dprintf(0, "pager free frame:0x%X virtual:0x%X\n", pte->address, virtual_address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 					}
 

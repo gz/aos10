@@ -298,8 +298,8 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if (err) {
 		// unmap and free heap memory region
-		//pager_unmap_range(...);
-		//pager_free_range(...);
+		pager_unmap_range(tid,HEAP_START,HEAP_END);
+		pager_free_range(tid,HEAP_START,HEAP_END);
 
 		p->initialized = TRUE;
 
