@@ -26,6 +26,8 @@ typedef struct proc {
 	page_table_entry* page_index;						/**< 1st level page table */
 } process;
 
+#define MAX_RUNNING_PROCESS 128
+
 int create_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int start_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 int delete_process(L4_ThreadId_t, L4_Msg_t*, data_ptr);
@@ -37,5 +39,6 @@ int get_executable_name(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf);
 void process_init(void);
 process* get_process(L4_ThreadId_t tid);
 process* register_process(char* name);
+inline L4_ThreadId_t pid2tid(pid_t);
 
 #endif /* PROCESS_H_ */

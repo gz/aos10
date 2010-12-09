@@ -25,7 +25,6 @@
 
 static L4_Word_t next_task;
 #define RESERVED_ID_BITS 10
-#define MAX_RUNNING_PROCESS 128
 /** Table containing currently running processes */
 static process ptable[MAX_RUNNING_PROCESS];
 
@@ -72,7 +71,7 @@ static inline pid_t tid2pid(L4_ThreadId_t tid) {
  * @param pid
  * @return Thread ID
  */
-static inline L4_ThreadId_t pid2tid(pid_t pid) {
+inline L4_ThreadId_t pid2tid(pid_t pid) {
 	assert(pid >=0 && pid < MAX_RUNNING_PROCESS);
 	//assert(ptable[pid].is_active);
 
@@ -254,13 +253,15 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int file_cache_index = find_file(name);
 
 	if(file_cache_index == -1) {
-		dprintf(0, "The file you're trying to execute has no executable rights.\n");
-
 		return IPC_SET_ERROR(EXECUTABLE_NOT_FOUND);
 	}
 	else if(! (file_cache[file_cache_index]->status.st_fmode & FM_EXEC) ) {
-		dprintf(0, "The file you're trying to execute has no executable rights.\n");
+		dprintf(0, "create_process failed: The file you're trying to execute has no executable rights.\n");
 		return IPC_SET_ERROR(FILE_NOT_EXECUTABLE);
+	}
+	else if( file_cache[file_cache_index]->status.st_size > ONE_MEGABYTE*4 )  {
+		dprintf(0, "create_process failed: The elf binary should not be larger than the heap size.\n");
+		return IPC_SET_ERROR(FILE_TOO_BIG);
 	}
 
 	L4_BootRec_t* boot_record = find_boot_executable("initializer");
@@ -294,9 +295,9 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(L4_UntypedWords(msg_p->tag) != 1 || p == NULL || p->initialized)
 		return IPC_SET_ERROR(-1);
 
-	int err = L4_MsgWord(msg_p, 0);
+	int status = L4_MsgWord(msg_p, 0);
 
-	if (err) {
+	if (status) {
 		// unmap and free heap memory region
 		pager_unmap_range(tid,HEAP_START,HEAP_END);
 		pager_free_range(tid,HEAP_START,HEAP_END);

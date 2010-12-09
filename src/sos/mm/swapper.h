@@ -31,6 +31,7 @@ extern struct pages_head active_pages_head;
 #define NO_PAGE_AVAILABLE -4
 
 void swap_free(int);
+L4_Bool_t swap_get(int);
 void swap_init(void);
 int swap_out(L4_ThreadId_t);
 int swap_in(page_queue_item*);

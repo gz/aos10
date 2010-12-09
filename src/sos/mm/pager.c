@@ -83,6 +83,7 @@ for(int i=0; i<4096; i++) {
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
 
+static void check_pager_invariants(void);
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -368,7 +369,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// else page just isn't mapped in hardware
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, requested_access);
-	L4_Word_t memory_type = (addr != (L4_Word_t)ipc_memory_start) ? L4_DefaultMemory : L4_UncachedMemory;
+	L4_Word_t memory_type = (addr != (L4_Word_t)ipc_memory_start) ? L4_UncachedMemory : L4_UncachedMemory;
 	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), memory_type);
 
 	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS(second_entry->address));
@@ -385,6 +386,7 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 {
 	assert( ((short) L4_Label(msgP->tag) >> 4) ==  L4_PAGEFAULT); // make sure pager is only called in page fault context
+	check_pager_invariants();
 
     // Get fault information
     L4_Word_t addr = L4_MsgWord(msgP, 0);
@@ -516,7 +518,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 				}
 
 				else if(pte->address_ptr != NULL) {
-					dprintf(0, "pager free frame:%d\n", pte->address);
+					dprintf(3, "pager free frame:%d\n", pte->address);
 					frame_free(CLEAR_LOWER_BITS(pte->address));
 				}
 
@@ -536,7 +538,7 @@ void pager_free_all(L4_ThreadId_t tid) {
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid)) {
-    		dprintf(0, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
+    		dprintf(3, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
     		if(!page->awaits_callback) {
@@ -576,7 +578,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 					}
 
 					else if(pte->address_ptr != NULL) {
-						dprintf(0, "pager free frame:0x%X virtual:0x%X\n", pte->address, virtual_address);
+						dprintf(3, "pager free frame:0x%X virtual:0x%X\n", pte->address, virtual_address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 					}
 
@@ -596,7 +598,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid) && page->virtual_address >= start && page->virtual_address < end) {
-    		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
+    		dprintf(3, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
     		if(!page->awaits_callback) {
@@ -646,4 +648,93 @@ page_table_entry* pager_table_lookup(L4_ThreadId_t tid, L4_Word_t addr) {
 		return NULL;
 
 	return second_level_lookup(first_entry->address_ptr, SECOND_LEVEL_INDEX(addr));
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+static void check_pager_invariants() {
+
+	// Verify pagetables of all currently running processes
+	for (int i=1; i<MAX_RUNNING_PROCESS; i++) {
+		process* p = get_process(pid2tid(i));
+		if(p->is_active) {
+
+			for(int i=0; i < FIRST_LEVEL_ENTRIES; i++) {
+				void* second_level_table = first_level_lookup(p->tid, i)->address_ptr;
+
+				if(second_level_table != NULL) {
+
+					for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
+
+						L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
+						page_table_entry* pte = second_level_lookup(second_level_table, j);
+
+						if(pte->address_ptr == NULL) {
+							// page should not be mapped in system
+							L4_Fpage_t fpage = L4_FpageLog2(virtual_address, PAGESIZE_LOG2);
+							L4_PhysDesc_t phys;
+
+							if(L4_GetStatus(p->tid, &fpage, &phys) == FALSE) {
+								dprintf(0, "Can't get status for page 0x%X (error:%d)\n", virtual_address, L4_ErrorCode());
+							}
+							assert(!L4_WasReferenced(fpage));
+
+							// page should not be in queue
+						    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
+						    	if(L4_IsThreadEqual(page->tid, p->tid) && page->virtual_address == virtual_address)
+						    		assert(FALSE);
+						    }
+
+						}
+						else if(IS_SWAPPED(pte->address)) {
+							// swap offset should be marked as swapped
+							assert(swap_get( pte->address & ~0xFFF ));
+
+							// page should not be in queue
+						    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
+						    	if(L4_IsThreadEqual(page->tid, p->tid) && page->virtual_address == virtual_address)
+						    		assert(FALSE);
+						    }
+
+						}
+						/*else if(pte->address_ptr != NULL && virtual_address != (L4_Word_t)ipc_memory_start) {
+							L4_Bool_t found = FALSE;
+						    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
+						    	if(L4_IsThreadEqual(page->tid, p->tid) && page->virtual_address == virtual_address) {
+						    		found = TRUE;
+						    		break;
+						    	}
+						    }
+						    if(!found) {
+						    	dprintf(0, "virtual_address:0x%X not in queue! pte->address is:%u\n", virtual_address, pte->address);
+						    	assert(FALSE);
+						    }
+						}*/
+
+					}
+
+				} // no second level table exists
+
+			} // end walking through pagetable
+
+
+		} // end if is active
+	} // end walking through process
+
+
+
 }

@@ -10,7 +10,7 @@
  **/
 int main(void) {
 
-	printf("Infinite Looping Process is running...\n");
+	printf("Infinite Looping Process is running... utcb at: %p\n", L4_GetUtcbBase());
 
 	while(1) {
 		sleep(1000);

@@ -111,8 +111,8 @@ static void dereference(page_queue_item* page) {
 	if(L4_UnmapFpage(page->tid, L4_FpageLog2(page->virtual_address, PAGESIZE_LOG2)) == FALSE) {
 		dprintf(0, "Can't unmap page at 0x%X (error:%d)\n", page->virtual_address, L4_ErrorCode());
 	}
-	L4_CacheFlushAll();
 
+	//L4_CacheFlushRange(page->tid, pager_table_lookup(page->tid, page->virtual_address)->address, pager_table_lookup(page->tid, page->virtual_address)->address+PAGESIZE);
 }
 
 
@@ -195,10 +195,11 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 				dprintf(0, "page is swapped out\n");
 
 				if(page->awaits_callback) {
-					dprintf(0,"swap_write_callback: ");
+					dprintf(0,"freed frame: 0x%X\n", pte->address);
 					frame_free(CLEAR_LOWER_BITS(pte->address));
 					mark_swapped(pte, page->swap_offset);
 
+					dprintf(0,"swap_write_callback pte->address:%u\n", pte->address);
 					// restart the thread who ran out of memory
 					send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
 				}
@@ -321,12 +322,24 @@ void swap_free(int offset) {
 }
 
 
+L4_Bool_t swap_get(int offset) {
+	assert(offset % PAGESIZE == 0);
+
+	int bit_number = offset / PAGESIZE;
+	assert(bit_number <= MAX_SWAP_ENTRIES);
+
+	return bitfield_get(swap_bitfield, bit_number);
+}
+
+
 /**
  * Initializes datastructures required for swapping.
  * This is called by pager_init.
  */
 void swap_init() {
 	TAILQ_INIT(&active_pages_head);
+	dprintf(0, "active_pages_head->tqh_first:%p", active_pages_head.tqh_first);
+	dprintf(0, "active_pages_head->tqh_first:%p", active_pages_head.tqh_last);
 
 	// initialize the bitfield for the swap file
 	swap_bitfield = malloc(MAX_SWAP_ENTRIES / 8);
@@ -395,7 +408,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	else {
 		assert(page->swap_offset >= 0);
 		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
-		dprintf(0,"swap_out: 0x%X\n", pte->address);
+		dprintf(0,"freed frame: 0x%X\n", pte->address);
 		frame_free(CLEAR_LOWER_BITS(pte->address));
 		mark_swapped(pte, page->swap_offset);
 		free(page);

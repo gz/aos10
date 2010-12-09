@@ -9,8 +9,6 @@ int main(void) {
 	char filename[N_NAME];
 	process_get_name(filename);
 
-	printf("loading: %s\n", filename);
-
 	int fd = open(filename, O_RDONLY);
 	int bytes_read = 0;
 
@@ -24,10 +22,9 @@ int main(void) {
 	while( (bytes_read = read(fd, copy_to, 512)) ) {
 		copy_to += bytes_read;
 	}
-	int err = elf_loadFile(elf_buffer, 0);
+	int ret = elf_loadFile(elf_buffer, 0);
 
-	printf("end elf_loadFile enter at:0x%llX\n", elf_getEntryPoint(elf_buffer));
-	process_start(err);
+	process_start(ret);
 	return 0;
 }
 
