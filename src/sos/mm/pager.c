@@ -469,7 +469,7 @@ void pager_unmap_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end){
 				page_table_entry* pte = second_level_lookup(second_level_table, j);
 				L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
 
-				if(virtual_address >= start && virtual_address <= end && pte->address_ptr != NULL && !IS_SWAPPED(pte->address)) {
+				if(virtual_address >= start && virtual_address < end && pte->address_ptr != NULL && !IS_SWAPPED(pte->address)) {
 					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, virtual_address);
 
 					if(L4_UnmapFpage(tid, L4_FpageLog2(virtual_address, PAGESIZE_LOG2)) == 0) {
@@ -556,7 +556,7 @@ void pager_free_all(L4_ThreadId_t tid) {
 
 }
 
-/*
+
 void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 
 	// free allocated 2nd level pagetables and free currently swapped out entries in swap file
@@ -566,23 +566,25 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 		if(second_level_table != NULL) {
 
 			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
-				L4_Word_t virtual_address = CREA
-				page_table_entry* pte = second_level_lookup(second_level_table, j);
+				L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
 
-				if(IS_SWAPPED(pte->address)) {
-					swap_free(CLEAR_LOWER_BITS(pte->address));
+				if(virtual_address >= start && virtual_address < end) {
+					page_table_entry* pte = second_level_lookup(second_level_table, j);
+
+					if(IS_SWAPPED(pte->address)) {
+						swap_free(CLEAR_LOWER_BITS(pte->address));
+					}
+
+					if(pte->address_ptr != NULL) {
+						dprintf(0, "pager free frame:%d\n", pte->address);
+						frame_free(CLEAR_LOWER_BITS(pte->address));
+					}
+
+					pte->address_ptr = NULL;
 				}
 
-				if(pte->address_ptr != NULL) {
-					dprintf(0, "pager free frame:%d\n", pte->address);
-					frame_free(CLEAR_LOWER_BITS(pte->address));
-				}
-
-				pte->address_ptr = NULL;
 			}
 
-			free(second_level_table);
-			second_level_table = NULL;
 		}
 
 	}
@@ -593,7 +595,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 
     	page_queue_item* next = page->entries.tqe_next;
 
-    	if(L4_IsThreadEqual(tid, page->tid)) {
+    	if(L4_IsThreadEqual(tid, page->tid) && page->virtual_address >= start && page->virtual_address < end) {
     		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
 
     		if(!page->awaits_callback) {
@@ -613,7 +615,7 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
     }
 
 }
-*/
+
 
 /**
  * Returns the corresponding physical address (or swap offset)
