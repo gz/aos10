@@ -18,9 +18,6 @@ typedef struct page_entry {
 #define ONE_MEGABYTE (1024*1024)
 #define VIRTUAL_START 0x2000000
 
-//#define ELF_START VIRTUAL_START
-//#define ELF_END (VIRTUAL_START + 8*ONE_MEGABYTE)
-
 #define TEXT_START VIRTUAL_START
 #define TEXT_END (VIRTUAL_START + 4*ONE_MEGABYTE)
 
@@ -44,8 +41,13 @@ typedef struct page_entry {
 
 void pager_init(void);
 int pager(L4_ThreadId_t, L4_Msg_t*);
+
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf);
 void pager_free_all(L4_ThreadId_t);
+
+void pager_unmap_range(L4_ThreadId_t, L4_Word_t start, L4_Word_t end);
+//void pager_free_range(L4_ThreadId_t, L4_Word_t start, L4_Word_t end);
+
 void* pager_physical_lookup(L4_ThreadId_t, L4_Word_t addr);
 page_table_entry* pager_table_lookup(L4_ThreadId_t, L4_Word_t);
 

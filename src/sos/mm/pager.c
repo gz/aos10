@@ -103,14 +103,14 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 
 	// User space physical memory permission
 	if(!p->initialized && addr < VIRTUAL_START)
-		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
+		return L4_FullyAccessible;
 
 	// Text permission
 	if(addr >= TEXT_START && addr < TEXT_END) {
 		if(!p->initialized)
 			return L4_ReadWriteOnly;
 		else
-			return L4_eXecutable;
+			return L4_eXecutable | L4_Readable;
 	}
 
 	// Data permission
@@ -443,10 +443,21 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 
 /**
  * System call handler
- * This function unmaps all fpages for a given thread mapped to physical
- * memory by the pager and flushes the CPU Cache.
+ * This function unmaps all fpages for a given thread and flushes the CPU Cache.
  */
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
+	pager_unmap_range(tid, 0x0, STACK_TOP);
+	return 0; // send no reply
+}
+
+
+/**
+ * Unmaps the fpages in the kernel in a given range of virtual addresses.
+ * @param tid Thread ID which one to unmap
+ * @param start First virtual address to unmap
+ * @param end Last virtual address to unmap
+ */
+void pager_unmap_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end){
 
 	for(int i=0; i < FIRST_LEVEL_ENTRIES; i++) {
 		void* second_level_table = first_level_lookup(tid, i)->address_ptr;
@@ -456,10 +467,9 @@ int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
 
 				page_table_entry* pte = second_level_lookup(second_level_table, j);
+				L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
 
-				if(pte->address_ptr != NULL && !IS_SWAPPED(pte->address)) {
-
-					L4_Word_t virtual_address = CREATE_VIRTUAL_ADDRESS(i,j);
+				if(virtual_address >= start && virtual_address <= end && pte->address_ptr != NULL && !IS_SWAPPED(pte->address)) {
 					dprintf(3, "Unmap for id:%X at 1st:%d 2nd:%d which corresponds to address %X\n", tid, i, j, virtual_address);
 
 					if(L4_UnmapFpage(tid, L4_FpageLog2(virtual_address, PAGESIZE_LOG2)) == 0) {
@@ -478,7 +488,6 @@ int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	// make sure to flush the cache otherwise there might still be some mappings in the cache
 	L4_CacheFlushAll();
 
-	return 0; // send no reply
 }
 
 
@@ -547,6 +556,64 @@ void pager_free_all(L4_ThreadId_t tid) {
 
 }
 
+/*
+void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
+
+	// free allocated 2nd level pagetables and free currently swapped out entries in swap file
+	for(int i=0; i<FIRST_LEVEL_ENTRIES; i++) {
+
+		void* second_level_table = first_level_lookup(tid, i)->address_ptr;
+		if(second_level_table != NULL) {
+
+			for(int j=0; j < SECOND_LEVEL_ENTRIES; j++) {
+				L4_Word_t virtual_address = CREA
+				page_table_entry* pte = second_level_lookup(second_level_table, j);
+
+				if(IS_SWAPPED(pte->address)) {
+					swap_free(CLEAR_LOWER_BITS(pte->address));
+				}
+
+				if(pte->address_ptr != NULL) {
+					dprintf(0, "pager free frame:%d\n", pte->address);
+					frame_free(CLEAR_LOWER_BITS(pte->address));
+				}
+
+				pte->address_ptr = NULL;
+			}
+
+			free(second_level_table);
+			second_level_table = NULL;
+		}
+
+	}
+
+	// free page queue items and remove them from active queue, also free their
+	// corresponding swap space (if available)
+    for(page_queue_item* page = active_pages_head.tqh_first; page != NULL;) {
+
+    	page_queue_item* next = page->entries.tqe_next;
+
+    	if(L4_IsThreadEqual(tid, page->tid)) {
+    		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
+
+    		if(!page->awaits_callback) {
+				TAILQ_REMOVE(&active_pages_head, page, entries);
+				if(page->swap_offset != -1)
+					swap_free(page->swap_offset);
+				free(page);
+			}
+    		else {
+    			// page is freed later in corresponding nfs swap callback (see swapper.c)
+    			page->awaits_callback = FALSE;
+    		}
+
+    	}
+
+    	page = next;
+    }
+
+}
+*/
 
 /**
  * Returns the corresponding physical address (or swap offset)
