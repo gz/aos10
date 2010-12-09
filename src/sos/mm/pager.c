@@ -99,14 +99,19 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 	}
 
 	process* p = get_process(tid);
+	assert(p != NULL);
 
 	// User space physical memory permission
 	if(!p->initialized && addr < VIRTUAL_START)
 		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
 
 	// Text permission
-	if(addr >= TEXT_START && addr < TEXT_END)
-		return L4_eXecutable;
+	if(addr >= TEXT_START && addr < TEXT_END) {
+		if(!p->initialized)
+			return L4_ReadWriteOnly;
+		else
+			return L4_eXecutable;
+	}
 
 	// Data permission
 	if(addr >= DATA_START && addr < DATA_END)
