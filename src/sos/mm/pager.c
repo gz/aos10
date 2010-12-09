@@ -538,8 +538,8 @@ void pager_free_all(L4_ThreadId_t tid) {
     	if(L4_IsThreadEqual(tid, page->tid)) {
     		dprintf(0, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
 
+			TAILQ_REMOVE(&active_pages_head, page, entries);
     		if(!page->awaits_callback) {
-				TAILQ_REMOVE(&active_pages_head, page, entries);
 				if(page->swap_offset != -1)
 					swap_free(page->swap_offset);
 				free(page);
@@ -598,8 +598,8 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
     	if(L4_IsThreadEqual(tid, page->tid) && page->virtual_address >= start && page->virtual_address < end) {
     		dprintf(0, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
 
+			TAILQ_REMOVE(&active_pages_head, page, entries);
     		if(!page->awaits_callback) {
-				TAILQ_REMOVE(&active_pages_head, page, entries);
 				if(page->swap_offset != -1)
 					swap_free(page->swap_offset);
 				free(page);

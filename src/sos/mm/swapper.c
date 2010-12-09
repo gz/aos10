@@ -56,7 +56,7 @@
 #include "swapper.h"
 #include "frames.h"
 
-#define verbose 1
+#define verbose 3
 
 /** Amount of bytes read/written from/to swap file per call */
 #define BATCH_SIZE 512
@@ -195,6 +195,7 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 				dprintf(0, "page is swapped out\n");
 
 				if(page->awaits_callback) {
+					dprintf(0,"swap_write_callback: ");
 					frame_free(CLEAR_LOWER_BITS(pte->address));
 					mark_swapped(pte, page->swap_offset);
 
@@ -394,6 +395,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	else {
 		assert(page->swap_offset >= 0);
 		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
+		dprintf(0,"swap_out: 0x%X\n", pte->address);
 		frame_free(CLEAR_LOWER_BITS(pte->address));
 		mark_swapped(pte, page->swap_offset);
 		free(page);

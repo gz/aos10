@@ -22,7 +22,7 @@
 #define verbose 1
 
 /** Reduces the number of frames to 10 */
-//#define SWAP_TEST 1
+#define SWAP_TEST 1
 #define BITS_PER_CHAR 8
 
 /** List elements used to maintain a list of the free frames */
@@ -215,6 +215,7 @@ L4_Word_t frame_alloc(void) {
  * @param frame start address of frame to be freed
  */
 void frame_free(L4_Word_t frame) {
+	dprintf(0,"frame:%X\n",frame);
 	assert(is_valid_frame_address(frame));
 
 	if(bitfield_get(frame)) {
