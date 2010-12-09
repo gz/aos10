@@ -1,0 +1,6 @@
+Import("*")
+
+sources=Split("thrash.c")
+obj = env.MyProgram("tt", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+
+Return("obj")
