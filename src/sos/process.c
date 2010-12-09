@@ -476,7 +476,6 @@ int get_executable_name(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	if(p == NULL || buf == NULL || p->initialized)
 		return IPC_SET_ERROR(-1);
 
-	dprintf(0, "sending p->command:%s\n", p->command);
 	strcpy(buf, p->command);
 	return set_ipc_reply(msg_p, 1, 0);
 }

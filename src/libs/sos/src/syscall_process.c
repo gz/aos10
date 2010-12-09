@@ -78,11 +78,12 @@ int process_start() {
 
 
 int process_get_name(char* name) {
+	// Don't do printf here as it will fuck up your ipc_memory and you need it
+	// at least until after you did strcpy
 	ipc_memory_start[0] = 's'; // make sure the memory is mapped somewhere
 
 	L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_GET_NAME, &msg, 0);
-	printf("got words:%ld\n",(L4_Word_t) L4_UntypedWords(tag));
 	assert(L4_UntypedWords(tag) == 1);
 
 	int ret = L4_MsgWord(&msg, 0);
