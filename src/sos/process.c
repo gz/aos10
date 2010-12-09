@@ -298,13 +298,15 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	int status = L4_MsgWord(msg_p, 0);
 
 	if (status) {
+		L4_AbortIpc_and_stop_Thread(tid);
+
 		// unmap and free heap memory region
 		pager_unmap_range(tid,HEAP_START,HEAP_END);
 		pager_free_range(tid,HEAP_START,HEAP_END);
 
 		p->initialized = TRUE;
 
-		//L4_AbortIpc_and_stop_Thrbufbufead(tid);
+		//L4_AbortIpc_and_stop_Thread(tid);
 		//L4_CacheFlushAll();
 		L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
 	}

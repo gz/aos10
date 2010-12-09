@@ -217,7 +217,7 @@ static page_queue_item* create_page_queue_item(L4_ThreadId_t tid, L4_Word_t addr
 	p->tid = tid;
 	p->virtual_address = addr;
 	p->swap_offset = swap_offset;
-	p->awaits_callback = FALSE;
+	p->process_deleted = FALSE;
 
 	return p;
 }
@@ -534,26 +534,28 @@ void pager_free_all(L4_ThreadId_t tid) {
 	// free page queue items and remove them from active queue, also free their
 	// corresponding swap space (if available)
     for(page_queue_item* page = active_pages_head.tqh_first; page != NULL;) {
-
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid)) {
     		dprintf(3, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
-    		if(!page->awaits_callback) {
-				if(page->swap_offset != -1)
-					swap_free(page->swap_offset);
-				free(page);
-			}
-    		else {
-    			// page is freed later in corresponding nfs swap callback (see swapper.c)
-    			page->awaits_callback = FALSE;
-    		}
-
+			if(page->swap_offset != -1)
+				swap_free(page->swap_offset);
+			free(page);
     	}
 
     	page = next;
+    }
+
+    // make sure to correctly cancel all ongoing swapping operations for this process
+    for(page_queue_item* page = swapping_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
+    	if(L4_IsThreadEqual(tid, page->tid)) {
+			page->process_deleted = TRUE;
+    	}
+    	if(L4_IsThreadEqual(tid, page->initiator)) {
+    		page->initiator = L4_nilthread; // means we don't call back in swap out
+    	}
     }
 
 }
@@ -601,19 +603,23 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
     		dprintf(3, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
-    		if(!page->awaits_callback) {
-				if(page->swap_offset != -1)
-					swap_free(page->swap_offset);
-				free(page);
-			}
-    		else {
-    			// page is freed later in corresponding nfs swap callback (see swapper.c)
-    			page->awaits_callback = FALSE;
-    		}
+			if(page->swap_offset != -1)
+				swap_free(page->swap_offset);
+			free(page);
 
     	}
 
     	page = next;
+    }
+
+    // make sure to correctly cancel all ongoing swapping operations for this process
+    for(page_queue_item* page = swapping_pages_head.tqh_first; page != NULL; page = page->entries.tqe_next) {
+    	if(L4_IsThreadEqual(tid, page->tid) && page->virtual_address >= start && page->virtual_address < end) {
+			page->process_deleted = TRUE;
+    	}
+    	if(L4_IsThreadEqual(tid, page->initiator) && page->virtual_address >= start && page->virtual_address < end) {
+    		page->initiator = L4_nilthread; // means we don't call back in swap out
+    	}
     }
 
 }

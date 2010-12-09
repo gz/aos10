@@ -8,7 +8,7 @@
 /** Information tracked for all active pages */
 typedef struct pit {
 	TAILQ_ENTRY(pit) entries;
-	L4_Bool_t awaits_callback;	/**< If we need to call back to the thread */
+	L4_Bool_t process_deleted;	/**< If we need to call back to the thread */
 
 	L4_ThreadId_t tid;			/**< Owner of the page */
 	L4_Word_t virtual_address;	/**< Virtual address which accesses the page */
@@ -20,6 +20,8 @@ typedef struct pit {
 
 TAILQ_HEAD(pages_head, pit);
 extern struct pages_head active_pages_head;
+extern struct pages_head swapping_pages_head;
+
 
 /** File descriptor Index for swap file in root process filetable */
 #define SWAP_FD 1

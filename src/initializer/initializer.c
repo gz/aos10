@@ -1,9 +1,20 @@
+/**
+ * Initializer
+ * =============
+ * This is the initializer binary used to load ELF binarys
+ * from the file system and set them up in memory to
+ * execute them.
+ * Note: The initializer executable resides in the bootimg.bin
+ * file within our SOS server. It is started on process_create
+ * as a privileged user space program. Privileged because until
+ * process_start() is called it is able to access the physical
+ * address space and can write to the virtual ELF text section.
+ */
+
 #include <sos.h>
 #include <elf/elf.h>
 
 #define HEAP_START 0x40000000
-
-//static char elf_buffer[4096*35];
 
 int main(void) {
 	char filename[N_NAME];

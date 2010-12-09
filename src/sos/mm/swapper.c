@@ -65,6 +65,7 @@
 static data_ptr swap_bitfield;
 
 struct pages_head active_pages_head;
+struct pages_head swapping_pages_head;
 
 
 /**
@@ -147,6 +148,7 @@ static page_queue_item* second_chance_select(struct pages_head* page_queue) {
 
     }
 
+    dprintf(0, "NO PAGED IN ACTIVE QUEUE!!\n");
     return NULL; // no pages in queue (bad)
 }
 
@@ -190,36 +192,46 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			page->to_swap -= BATCH_SIZE;
 
 			// swapping complete, can we now finally free the frame?
-			if(!is_referenced(page)) {
-				if(page->to_swap == 0) {
+			if(page->to_swap == 0) {
+				if(!is_referenced(page)) {
 
 					dprintf(0, "page is swapped out\n");
-
-					if(page->awaits_callback) {
+					if(!page->process_deleted) {
 						dprintf(0,"freed frame: 0x%X\n", pte->address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 						mark_swapped(pte, page->swap_offset);
 
 						dprintf(0,"swap_write_callback pte->address:%u\n", pte->address);
 						// restart the thread who ran out of memory
-						send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
+						if(!L4_IsNilThread(page->initiator))
+							send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
 					}
 					else {} // page was killed, nothing to do
 
+					TAILQ_REMOVE(&swapping_pages_head, page, entries);
 					free(page);
-					// Please Note: Since we don't share memory across
-					// processes it cannot happen that a page is written
-					// to while swapping out. So this case is not handled here.
 
-				} // else: not everything has been swapped yet...
-			}
-			else {
-				page->initiator = L4_nilthread;
+				}
+				else {
+					// page has been referenced inbetween swapping out
+					// we need to restart the whole swap procedure
+					TAILQ_REMOVE(&swapping_pages_head, page, entries);
 
-	    		TAILQ_INSERT_TAIL(&active_pages_head, page, entries); // insert at front
-	    		if(page->awaits_callback)
-	    			send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
-				page->awaits_callback = FALSE;
+					if(!L4_IsNilThread(page->initiator)) {
+						dprintf(0, "waking up page->initiator:ox%X\n", page->initiator);
+						send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
+					}
+
+					if(!page->process_deleted) {
+						page->initiator = L4_nilthread;
+						TAILQ_INSERT_TAIL(&active_pages_head, page, entries);
+					}
+					else {
+						free(page);
+					}
+
+				}
+
 			}
 
 		}
@@ -227,12 +239,14 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 		case NFSERR_NOSPC:
 			dprintf(0, "System ran out of memory _and_ swap space (this is bad).\n");
+			TAILQ_REMOVE(&swapping_pages_head, page, entries);
 			free(page);
 			assert(FALSE);
 		break;
 
 		default:
 			dprintf(0, "%s: Bad NFS status (%d) from callback.\n", __FUNCTION__, status);
+			TAILQ_REMOVE(&swapping_pages_head, page, entries);
 			free(page);
 			assert(FALSE);
 			// We could probably try to restart swapping here but since it failed before
@@ -259,7 +273,8 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 	page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
 	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 
-	if(!page->awaits_callback) {
+	if(page->process_deleted) {
+		TAILQ_REMOVE(&swapping_pages_head, page, entries);
 		free(page);
 		return;
 	}
@@ -275,6 +290,7 @@ static void swap_read_callback(uintptr_t token, int status, fattr_t *attr, int b
 			// swapping in complete
 			if(page->to_swap == PAGESIZE) {
 				// restart the thread because the page is in memory again
+				TAILQ_REMOVE(&swapping_pages_head, page, entries);
 	    		TAILQ_INSERT_TAIL(&active_pages_head, page, entries);
 				send_ipc_reply(page->tid, L4_PAGEFAULT, 0);
 			}
@@ -348,8 +364,7 @@ L4_Bool_t swap_get(int offset) {
  */
 void swap_init() {
 	TAILQ_INIT(&active_pages_head);
-	dprintf(0, "active_pages_head->tqh_first:%p", active_pages_head.tqh_first);
-	dprintf(0, "active_pages_head->tqh_first:%p", active_pages_head.tqh_last);
+	TAILQ_INIT(&swapping_pages_head);
 
 	// initialize the bitfield for the swap file
 	swap_bitfield = malloc(MAX_SWAP_ENTRIES / 8);
@@ -392,7 +407,7 @@ int swap_out(L4_ThreadId_t initiator) {
 
 		page->to_swap = PAGESIZE;
 		page->initiator = initiator;
-		page->awaits_callback = TRUE;
+		TAILQ_INSERT_TAIL(&swapping_pages_head, page, entries);
 
 		file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 		assert(swap_fd != NULL);
@@ -440,8 +455,9 @@ int swap_in(page_queue_item* page) {
 	file_table_entry* swap_fd = get_process(root_thread_g)->filetable[SWAP_FD];
 	assert(swap_fd != NULL);
 
-	page->awaits_callback = TRUE;
 	page->to_swap = 0; // to keep track of how many bytes are read
+	TAILQ_INSERT_TAIL(&swapping_pages_head, page, entries);
+
 	nfs_read(&swap_fd->file->nfs_handle, page->swap_offset+page->to_swap, BATCH_SIZE, &swap_read_callback, (int)page);
 
 	return SWAPPING_PENDING;
