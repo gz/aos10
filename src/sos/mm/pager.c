@@ -98,13 +98,19 @@ static L4_Word_t get_access_rights(L4_ThreadId_t tid, L4_Word_t addr) {
 		return L4_NoAccess;
 	}
 
+	process* p = get_process(tid);
+
 	// User space physical memory permission
-	if(addr < VIRTUAL_START)
+	if(!p->initialized && addr < VIRTUAL_START)
 		return L4_FullyAccessible; // TODO: when we have binary in virtual memory we can set this to L4_NoAccess
 
-	// ELF binary
-	if(addr >= ELF_START && addr < ELF_END)
-		return L4_FullyAccessible;
+	// Text permission
+	if(addr >= TEXT_START && addr < TEXT_END)
+		return L4_eXecutable;
+
+	// Data permission
+	if(addr >= DATA_START && addr < DATA_END)
+		return L4_ReadWriteOnly;
 
 	// Heap permissions
 	if(addr >= HEAP_START && addr < HEAP_END)
@@ -357,12 +363,8 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// else page just isn't mapped in hardware
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, PAGESIZE_LOG2);
 	L4_Set_Rights(&targetFpage, requested_access);
-
-	L4_PhysDesc_t phys;
-	if(addr != (L4_Word_t)ipc_memory_start)
-		phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_DefaultMemory);
-	else
-		phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), L4_UncachedMemory);
+	L4_Word_t memory_type = (addr != (L4_Word_t)ipc_memory_start) ? L4_DefaultMemory : L4_UncachedMemory;
+	L4_PhysDesc_t phys = L4_PhysDesc(CLEAR_LOWER_BITS(second_entry->address), memory_type);
 
 	dprintf(1, "Trying to map virtual address %X with physical %X\n", addr, CLEAR_LOWER_BITS(second_entry->address));
 	return L4_MapFpage(tid, targetFpage, phys);

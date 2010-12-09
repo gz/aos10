@@ -298,7 +298,7 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	//L4_AbortIpc_and_stop_Thread(tid);
 	//L4_CacheFlushAll();
-	L4_Start_SpIp(tid, STACK_TOP, ELF_START);
+	L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
 
 	return 0;
 }
