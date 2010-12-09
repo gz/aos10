@@ -291,14 +291,21 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	process* p = get_process(tid);
 
-	if(p == NULL || p->initialized)
+	if(L4_UntypedWords(msg_p->tag) != 1 || p == NULL || p->initialized)
 		return IPC_SET_ERROR(-1);
 
-	p->initialized = TRUE;
+	int err = L4_MsgWord(msg_p, 0);
 
-	//L4_AbortIpc_and_stop_Thread(tid);
-	//L4_CacheFlushAll();
-	L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
+	if (err) {
+		p->initialized = TRUE;
+
+		//L4_AbortIpc_and_stop_Thread(tid);
+		//L4_CacheFlushAll();
+		L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
+	}
+	else {
+
+	}
 
 	return 0;
 }

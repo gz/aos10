@@ -109,7 +109,7 @@ pid_t process_wait(pid_t pid);
  * into memory to tell the SOS server to start the binary. This syscall is only invoked
  * once (not by the user) after that it will no longer work and always return -1.
  */
-int process_start(void);
+int process_start(int);
 
 
 /**

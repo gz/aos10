@@ -340,11 +340,9 @@ elf_loadFile(void *elfFile, int phys)
 	int i;
 
 	if (elf_checkFile(elfFile) != 0) {
-		printf("elf_checkFile failed\n");
 		return 0;
 	}
 
-	printf("start mmcpy: %d\n", elf_getNumProgramHeaders(elfFile));
 	for(i=0; i < elf_getNumProgramHeaders(elfFile); i++) {
 		/* Load that section */
 		uint64_t dest, src;
@@ -354,7 +352,6 @@ elf_loadFile(void *elfFile, int phys)
 		} else {
 			dest = elf_getProgramHeaderVaddr(elfFile, i);
 		}
-		printf("elf_loadFile: destination is: %llu\n", dest);
 		len = elf_getProgramHeaderFileSize(elfFile, i);
 		src = (uint64_t) (uintptr_t) elfFile + elf_getProgramHeaderOffset(elfFile, i);
 		memcpy((void*) (uintptr_t) dest, (void*) (uintptr_t) src, len);

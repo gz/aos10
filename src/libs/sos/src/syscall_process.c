@@ -70,9 +70,9 @@ pid_t process_wait(pid_t pid) {
 }
 
 
-int process_start() {
+int process_start(int err) {
 	L4_Msg_t msg;
-	system_call(SOS_PROCESS_START, &msg, 0);
+	system_call(SOS_PROCESS_START, &msg, 1, err);
 	return 0;
 }
 
