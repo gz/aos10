@@ -289,6 +289,21 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 }
 
 
+/**
+ * Syscall handler used by the initializer binary to tell sos that
+ * the elf binary is correctly loaded. This syscall will make sure
+ * that everything in physical and the heap of the prozess
+ * address space is freed again in the pager. And will reset
+ * the instruction pointer of the process to the given elf
+ * start address.
+ * In case the loaded file is not a valid ELF binary the process is
+ * just deleted.
+ *
+ * @param tid Thread ID of initializer process
+ * @param msg_p IPC mesage
+ * @param buf Shared IPC memory
+ * @return 0 (no message sent)
+ */
 int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	process* p = get_process(tid);
 
@@ -301,12 +316,12 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		L4_AbortIpc_and_stop_Thread(tid);
 
 		// unmap and free heap memory region
+		pager_unmap_initializer(tid);
 		pager_unmap_range(tid,HEAP_START,HEAP_END);
 		pager_free_range(tid,HEAP_START,HEAP_END);
 
 		p->initialized = TRUE;
 
-		//L4_AbortIpc_and_stop_Thread(tid);
 		//L4_CacheFlushAll();
 		L4_Start_SpIp(tid, STACK_TOP, TEXT_START);
 	}
@@ -314,7 +329,7 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		// could not load elf file, delete process (with staged IPC message contents)
 		L4_Msg_t msg;
 		L4_MsgAppendWord(&msg, tid2pid(tid));
-		delete_process(tid,&msg,NULL);
+		delete_process(tid, &msg, NULL);
 		dprintf(0,"process has been deleted again, because elf file could not be loaded\n");
 	}
 

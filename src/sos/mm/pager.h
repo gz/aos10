@@ -44,6 +44,7 @@ int pager(L4_ThreadId_t, L4_Msg_t*);
 
 int pager_unmap_all(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf);
 void pager_free_all(L4_ThreadId_t);
+void pager_unmap_initializer(L4_ThreadId_t);
 
 void pager_unmap_range(L4_ThreadId_t, L4_Word_t start, L4_Word_t end);
 void pager_free_range(L4_ThreadId_t, L4_Word_t start, L4_Word_t end);

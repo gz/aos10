@@ -25,7 +25,7 @@
  * Layout of our virtual address space:
  * ------------------------------------
  *      [[  TEXT  |  DATA  |  HEAP  |  NoAccess | IPC Memory |  NoAccess  |  STACK  |  NoAccess  ]]
- * 0x02000000         0x40000000            0x60000000               0xC0000000
+ * 0x02000000         0x40000000            0x60000000                         0xC0000000
  *
  * Limitations:
  * ------------------------------------
@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 4
+#define verbose 2
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0
@@ -83,7 +83,6 @@ for(int i=0; i<4096; i++) {
 
 #define IS_SWAPPED(addr)  ((addr) & 0x1)
 
-//static void check_pager_invariants(void);
 
 /**
  * Gets access rights for a given thread at a certain memory location.
@@ -242,6 +241,8 @@ void pager_init() {
  */
 static L4_Bool_t one_to_one_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requested_access) {
 
+	addr = ((addr >> PAGESIZE_LOG2) << PAGESIZE_LOG2);
+
 	// Construct fpage IPC message
 	L4_Fpage_t targetFpage = L4_FpageLog2(addr, 12);
 	L4_Set_Rights(&targetFpage, L4_FullyAccessible);
@@ -332,6 +333,8 @@ static int virtual_mapping(L4_ThreadId_t tid, L4_Word_t addr, L4_Word_t requeste
 	// Page referenced for the first time
 	if(second_entry->address_ptr == NULL) {
 
+		get_process(tid)->size += 1; // maintain prozess state for ps output
+
 		if( (second_entry->address_ptr = allocate_new_frame(tid)) == NULL ) {
 			return OUT_OF_FRAMES;
 		}
@@ -393,7 +396,7 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
     L4_Word_t ip = L4_MsgWord(msgP, 1);
     L4_Word_t fault_reason = L4_Label(msgP->tag) & 0xF; // permissions are stored in lower 4 bit of label
 
-	dprintf(2, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
+	dprintf(1, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
 
 	if(!is_access_granted(tid, addr, fault_reason)) {
 		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.\n", tid, addr, fault_reason, get_access_rights(tid, addr));
@@ -492,6 +495,26 @@ void pager_unmap_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end){
 
 }
 
+/**
+ * Unmaps all mappings the initializer process made
+ * in the physical address space.
+ * @param tid
+ */
+void pager_unmap_initializer(L4_ThreadId_t tid){
+
+	for(int i=0x710000; i < VIRTUAL_START; i+=PAGESIZE) {
+
+		if(L4_UnmapFpage(tid, L4_FpageLog2(i, PAGESIZE_LOG2)) == 0) {
+			dprintf(0, "Can't unmap page at %lx (error:%d)\n", i, L4_ErrorCode());
+		} // else success
+
+	}
+
+	// make sure to flush the cache otherwise there might still be some mappings in the cache
+	L4_CacheFlushAll();
+
+}
+
 
 /**
  * Frees the allocated space for the page table for a given thread.
@@ -518,11 +541,11 @@ void pager_free_all(L4_ThreadId_t tid) {
 				}
 
 				else if(pte->address_ptr != NULL) {
-					dprintf(3, "pager free frame:%d\n", pte->address);
 					frame_free(CLEAR_LOWER_BITS(pte->address));
 				}
 
 				pte->address_ptr = NULL;
+				get_process(tid)->size -= 1;
 			}
 
 			free(second_level_table);
@@ -537,7 +560,6 @@ void pager_free_all(L4_ThreadId_t tid) {
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid)) {
-    		dprintf(3, "remove page queue item:0x%X tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
 			if(page->swap_offset != -1)
@@ -580,7 +602,6 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
 					}
 
 					else if(pte->address_ptr != NULL) {
-						dprintf(3, "pager free frame:0x%X virtual:0x%X\n", pte->address, virtual_address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 					}
 
@@ -600,7 +621,6 @@ void pager_free_range(L4_ThreadId_t tid, L4_Word_t start, L4_Word_t end) {
     	page_queue_item* next = page->entries.tqe_next;
 
     	if(L4_IsThreadEqual(tid, page->tid) && page->virtual_address >= start && page->virtual_address < end) {
-    		dprintf(3, "remove page queue item:%d tid:0x%X\n", page->virtual_address, page->tid);
 
 			TAILQ_REMOVE(&active_pages_head, page, entries);
 			if(page->swap_offset != -1)

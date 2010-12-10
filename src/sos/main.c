@@ -189,7 +189,7 @@ int main(void)
     dprintf(0, "Available memory from 0x%08lx to 0x%08lx - %luMB\n", low, high, (high - low) / ONE_MEG);
 
     // Initialize memory management
-    frame_init((low + HEAP_SIZE), low+HEAP_SIZE+10*PAGESIZE);
+    frame_init((low + HEAP_SIZE), high);
     pager_init();
 
     // Initialize process structure and register root process

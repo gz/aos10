@@ -148,7 +148,6 @@ static page_queue_item* second_chance_select(struct pages_head* page_queue) {
 
     }
 
-    dprintf(0, "NO PAGED IN ACTIVE QUEUE!!\n");
     return NULL; // no pages in queue (bad)
 }
 
@@ -197,11 +196,9 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 					dprintf(0, "page is swapped out\n");
 					if(!page->process_deleted) {
-						dprintf(0,"freed frame: 0x%X\n", pte->address);
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 						mark_swapped(pte, page->swap_offset);
 
-						dprintf(0,"swap_write_callback pte->address:%u\n", pte->address);
 						// restart the thread who ran out of memory
 						if(!L4_IsNilThread(page->initiator))
 							send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
@@ -218,7 +215,6 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 					TAILQ_REMOVE(&swapping_pages_head, page, entries);
 
 					if(!L4_IsNilThread(page->initiator)) {
-						dprintf(0, "waking up page->initiator:ox%X\n", page->initiator);
 						send_ipc_reply(page->initiator, L4_PAGEFAULT, 0);
 					}
 
@@ -400,7 +396,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	if(page->swap_offset < 0 && (page->swap_offset = allocate_swap_entry()) < 0)
 		return OUT_OF_SWAP_SPACE;
 
-	dprintf(0, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X swap_offset:0x%X\n", page->tid, page->virtual_address, page->swap_offset);
+	dprintf(3, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X swap_offset:0x%X\n", page->tid, page->virtual_address, page->swap_offset);
 
 	if(is_dirty(page)) {
 		dprintf(1, "Selected page is dirty, need to write to swap space\n");
@@ -433,7 +429,6 @@ int swap_out(L4_ThreadId_t initiator) {
 	else {
 		assert(page->swap_offset >= 0);
 		page_table_entry* pte = pager_table_lookup(page->tid, page->virtual_address);
-		dprintf(0,"freed frame: 0x%X\n", pte->address);
 		frame_free(CLEAR_LOWER_BITS(pte->address));
 		mark_swapped(pte, page->swap_offset);
 		free(page);
