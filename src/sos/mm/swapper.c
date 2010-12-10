@@ -56,7 +56,7 @@
 #include "swapper.h"
 #include "frames.h"
 
-#define verbose 2
+#define verbose 1
 
 /** Amount of bytes read/written from/to swap file per call */
 #define BATCH_SIZE 512

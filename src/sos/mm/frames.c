@@ -27,7 +27,7 @@
  * Frame limit in case SWAP_TEST is defined (make sure that this is strict greater
  * than the amount of concurrent running processes.
  **/
-#define SWAP_FRAMES_LIMIT 10
+#define SWAP_FRAMES_LIMIT 15
 
 #define BITS_PER_CHAR 8
 

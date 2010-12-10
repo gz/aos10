@@ -311,10 +311,10 @@ void remove_timers(L4_ThreadId_t tid) {
 	// remove all queue entries further down the queue belonging to tid
 	alarm_timer** atp = (alarm_timer**) &timer_queue_head;
 	for (; *atp != NULL; atp = &(*atp)->next_alarm) {
-		dprintf(0,"walking timer queue, entry belongs to tid = 0x%X\n", (*atp)->owner);
+		dprintf(2,"walking timer queue, entry belongs to tid = 0x%X\n", (*atp)->owner);
 
 		if(L4_IsThreadEqual((*atp)->next_alarm->owner,tid)) {
-			dprintf(2,"remove entry from timer queue, belonging to tid = 0x%X\n", tid);
+			dprintf(1,"remove entry from timer queue, belonging to tid = 0x%X\n", tid);
 			alarm_timer* to_delete = (*atp)->next_alarm;
 			(*atp)->next_alarm = (*atp)->next_alarm->next_alarm;
 			free(to_delete);
