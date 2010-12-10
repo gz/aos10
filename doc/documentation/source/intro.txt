@@ -1,26 +1,26 @@
 Introduction
 ============
 
-This document is intended to provide insights about our implementation of
+This document is intended to provide insight about our implementation of
 the Advanced Operating System (AOS) project [#f1]_.
 
-Our project consists mainly on two parts: The SOS Server and a libsos library
-provided for user processes to communicate with the SOS Server.
-For our SOS Server we choose to go implement it in a monolithic single threaded
-fashion. We expected to have the least trouble with this approach as the project 
-would evolve.
+The two main parts of our project are the SOS Server and a libsos library for
+user processes, which enables these to communicate with the SOS Server.
+We chose to implement our SOS Server in monolithic single threaded fashion,
+because we expected to get the least amount of trouble with this approach as
+the project would evolve.
 
-* The :ref:`memory-management` Chapter will give insights about
+* Chapter :ref:`memory-management` will give insights about
   how the SOS server manages the memory of user processes.
 
-* The :ref:`syscall-interface` Chapter explains how user
+* Chapter :ref:`syscall-interface` explains how user
   processes communicate with the SOS Server.
 
-* The :ref:`io-subsystem` Chapter explains the code responsible for 
+* Chapter :ref:`io-subsystem` explains the code responsible for 
   reading and writing files on the NFS server as well as reading and writing 
   from and to the serial port.
 
-* The :ref:`process` Chapter contains information about how we manage
+* Chapter :ref:`process` contains information about how we manage
   user processes in the root server.
 
 
