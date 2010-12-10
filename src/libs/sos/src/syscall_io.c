@@ -17,7 +17,10 @@ fildes_t stdout_fd = 0;
  * @return File descriptor or -1 on error.
  */
 fildes_t open(const char *path, fmode_t mode) {
-	// preconditions
+	if(path == NULL)
+		return -1;
+
+	// preconditions (client responsibility)
 	assert(strlen(path) <= MAX_PATH_LENGTH);
 	assert(mode == O_RDONLY || mode == O_WRONLY || mode == O_RDWR);
 

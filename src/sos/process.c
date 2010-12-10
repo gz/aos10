@@ -200,7 +200,6 @@ process* register_process(char* name) {
 	// initialize process data
 	strcpy(new_process->command, name);
 	new_process->wait_for = L4_nilthread;
-	new_process->size = 1; // TODO in elf loading replace this with binary page size
 	new_process->start_time = get_time_stamp();
 	new_process->tid.global.X.version = 1; // TODO why is this not working with increasing version number?
 	new_process->is_active = TRUE;
@@ -361,7 +360,7 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
-	if(pid == 0)
+	if(pid < 1 || pid >= MAX_RUNNING_PROCESS)
 		return IPC_SET_ERROR(-1);
 
 	process* to_delete = get_process(pid2tid(pid));
@@ -445,6 +444,9 @@ int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(pid == -1) {
 		p->wait_for = L4_anythread;
+	}
+	else if(pid >= MAX_RUNNING_PROCESS || pid < -1) {
+		return IPC_SET_ERROR(-1);
 	}
 	else {
 		process* wait_process = get_process(pid2tid(pid));

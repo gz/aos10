@@ -344,6 +344,12 @@ void swap_free(int offset) {
 }
 
 
+/**
+ * Returns the bitfield value of a given
+ * swap offset.
+ * @param offset
+ * @return true or false
+ */
 L4_Bool_t swap_get(int offset) {
 	assert(offset % PAGESIZE == 0);
 

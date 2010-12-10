@@ -3,6 +3,9 @@
 #include <sos.h>
 
 pid_t process_create(const char *path) {
+	if(path == NULL)
+		return -1;
+
 	assert(strlen(path) < N_NAME);
 
     strcpy((char*) ipc_memory_start, path);
@@ -44,6 +47,8 @@ pid_t my_id(void) {
 
 
 int process_status(process_t *processes, unsigned max) {
+	assert(processes != NULL); 	// client must satisfy since it is not stated in sos.h that
+								// invalid buffer here is allowed
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_STATUS, &msg, 1, max);
 	assert(L4_UntypedWords(tag) == 1);
@@ -66,7 +71,7 @@ pid_t process_wait(pid_t pid) {
 	L4_MsgTag_t tag = system_call(SOS_PROCESS_WAIT, &msg, 1, pid);
 	assert(L4_UntypedWords(tag) == 1);
 
-	return 0;
+	return L4_MsgWord(&msg, 0);
 }
 
 
@@ -78,6 +83,9 @@ int process_start(int err) {
 
 
 int process_get_name(char* name) {
+	if(name == NULL)
+		return -1;
+
 	// Don't do printf here as it will fuck up your ipc_memory and you need it
 	// at least until after you did strcpy
 	ipc_memory_start[0] = 's'; // make sure the memory is mapped somewhere

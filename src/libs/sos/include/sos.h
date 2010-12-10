@@ -40,6 +40,7 @@ int close(fildes_t file);
  * Returns the number of bytes read.
  * Will block when reading from console and no input is presently
  * available. Returns -1 on error (invalid file, invalid buffer).
+ * New: Should make sure that nbyte <= 512
  */
 int read(fildes_t file, char *buf, size_t nbyte);
 
@@ -48,6 +49,7 @@ int read(fildes_t file, char *buf, size_t nbyte);
  * Write to an open file, from "buf", max "nbyte" bytes.
  * Returns the number of bytes written. <nbyte disk is full.
  * Returns -1 on error (invalid file, invalid buffer).
+ * New: Should make sure that nbyte <= 512
  */
 int write(fildes_t file, const char *buf, size_t nbyte);
 
@@ -75,6 +77,12 @@ int stat(const char *path, stat_t *buf);
  * Create a new process running the executable image "path".
  * Returns ID of new process, -1 if error (non-executable image, nonexisting
  * file).
+ * New: More return codes pid or one of these:
+ *  EXECUTABLE_NOT_FOUND
+ *  PROCESS_TABLE_FULL
+ *  FILE_NOT_EXECUTABLE
+ *  FILE_TOO_BIG
+ *  (see process_shared.h)
  */
 pid_t process_create(const char *path);
 
@@ -100,6 +108,7 @@ int process_status(process_t *processes, unsigned max);
 /**
  * Wait for process "pid" to exit. If "pid" is -1, wait for any process
  * to exit. Returns the pid of the process which exited.
+ * New: Returns -1 on invalid pid.
  */
 pid_t process_wait(pid_t pid);
 

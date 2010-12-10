@@ -1,0 +1,6 @@
+Import("*")
+
+sources=Split("block_console.c")
+obj = env.MyProgram("block_console", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+
+Return("obj")

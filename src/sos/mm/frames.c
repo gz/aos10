@@ -74,6 +74,7 @@ static L4_Bool_t is_valid_frame_address(L4_Word_t frame) {
 
 /**
  * Sets the used bit of a given frame to the value in `bit`.
+ * TODO: Code duplicate / use datastructures/bitfield.h instead
  *
  * @param frame which frame to set
  * @param bit low or high
@@ -97,6 +98,7 @@ static void bitfield_set(L4_Word_t frame, L4_Bool_t bit) {
 
 /**
  * Gets the value for the given `frame` in the bitfield.
+ * TODO: Code duplicate / use datastructures/bitfield.h instead
  *
  * @return 0 or 1 depending on wheter a `frame` is marked as used or
  * not in the frame table.
