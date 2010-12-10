@@ -23,6 +23,7 @@ int main(void) {
 				name[4] = '\0';
 
 				int fd = open(name, O_RDONLY);
+				assert(fd >= 0);
 				close(fd);
 
 			}

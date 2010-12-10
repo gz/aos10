@@ -397,10 +397,14 @@ int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	// check if there are any file creation for this process pending
 	// if yes, see to it that we don't reply back
+	// TODO this is worthless since new created files are not in filecache (yet)
+	/*
 	for(int i=0; i<DIR_CACHE_SIZE; i++) {
-		if(file_cache[i] != NULL && file_cache[i]->creation_pending && L4_IsThreadEqual(to_delete->tid, file_cache[i]->reader))
+		if(file_cache[i] != NULL)
+			dprintf(0, "setting:%s reader:0x%X creation_pending:%d\n", file_cache[i]->filename, file_cache[i]->reader, file_cache[i]->creation_pending);
+		if(file_cache[i] != NULL && L4_IsThreadEqual(to_delete->tid, file_cache[i]->reader))
 			file_cache[i]->reader = L4_nilthread;
-	}
+	}*/
 
 	// remove pending sleep timers for this process
 	remove_timers(to_delete->tid);
@@ -438,7 +442,6 @@ int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
-	dprintf("waitfor tid:0x%X wait on pid:%d\n", tid, pid);
 
 	if(pid == -1) {
 		p->wait_for = L4_anythread;

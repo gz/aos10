@@ -79,16 +79,15 @@ static void nfs_create_callback (uintptr_t token, int status, struct cookie* fh,
 			int mode = fi->status.st_fmode;
 			nfs_set_status((int)fi, NFS_OK, fh, attr);
 
-			if(!L4_IsNilThread(fi->reader))
+			if(get_process(fi->reader)->is_active) // TODO this can still fail but it is _very_ unlikely
 				open_nfs(fi, fi->reader, mode);
-
 		}
 		break;
 
 		default:
 			dprintf(0, "%s: Bad status (%d) from callback.\n", __FUNCTION__, status);
 
-			if(!L4_IsNilThread(fi->reader))
+			if(get_process(fi->reader)->is_active) // same as above..
 				send_ipc_reply(fi->reader, SOS_OPEN, 1, -1);
 		break;
 	}
