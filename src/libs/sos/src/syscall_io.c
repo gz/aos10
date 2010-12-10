@@ -39,7 +39,7 @@ fildes_t open(const char *path, fmode_t mode) {
 
 int close(fildes_t file) {
 	// preconditions
-	assert(file >= 0);
+	//assert(file >= 0);
 
     L4_Msg_t msg;
 	L4_MsgTag_t tag = system_call(SOS_CLOSE, &msg, 1, file);
