@@ -2,3 +2,66 @@
 
 System Call Interface
 =====================
+
+Operations which directly involve hardware, i.e. accessing the network, files or the CPU
+timer, can only be executed by the SOS Server, the only thread besides the L4 kernel that
+is allowed to execute priviledged code (accessing hardware is priviledged).
+
+Therefore, whenever a user programm wants to access something involving hardware, it has to
+ask the SOS Server to do it. The System Call Interface is the way how user programs
+communicate with the SOS Server in such situations.
+
+In L4, the only way in which different threads can communicate with each other is through
+interprocess communication (IPC), so this is also used to implement the functionality of
+the system calls. Implementing IPC was the goal of the project milestone 0. To solve it, we
+more or less only put together all the L4 calls necessary to send one message. But already
+during work for milestone 1, we realized that because of the fact, that we need to send
+an IPC message for every system call, there would be a lot of repeated code for every
+single system call function.
+
+Therefore we created a shared header file :file:`syscalls.h` that could be included by both
+the SOS Server and the libsos library::
+
+  /**
+   * Identifiers for sos syscalls.
+   */
+
+  #ifndef SYSCALLS_H_
+  #define SYSCALLS_H_
+
+  #define GET_SYSCALL_NR(t)	((short) L4_Label(t) >> 4)
+  #define CREATE_SYSCALL_NR(t)	(t << 4)
+
+  // Some IPC labels defined in the L4 documentation
+  #define L4_PAGEFAULT	((L4_Word_t) -2)
+  #define L4_INTERRUPT	((L4_Word_t) -1)
+
+  // IO Syscall Labels
+  #define SOS_OPEN 			 0
+  #define SOS_READ 			 1
+  #define SOS_WRITE 			 2
+  #define SOS_CLOSE 			 3
+  #define SOS_GETDIRENT 		 4
+  #define SOS_STAT 			 5
+
+  // Process Syscall Labels
+  #define SOS_PROCESS_CREATE		 6
+  #define SOS_PROCESS_START		 7
+  #define SOS_PROCESS_DELETE		 8
+  #define SOS_PROCESS_ID 		 9
+  #define SOS_PROCESS_STATUS		10
+  #define SOS_PROCESS_WAIT 		11
+  #define SOS_PROCESS_GET_NAME		12
+
+  // IO Syscall Labels
+  #define SOS_SLEEP 			13
+  #define SOS_TIMESTAMP 		14
+
+  // Debug Syscall Labels
+  #define SOS_UNMAP_ALL			15
+
+  #endif /* SYSCALLS_H_ */
+
+
+that implemented special functions both for the SOS Server
+and also for the libsos library, that take care of assembling the message
