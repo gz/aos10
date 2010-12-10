@@ -420,8 +420,13 @@ int main(void) {
 				printf("File \"%s\" not executable\n", argv[0]);
 			} else {
 				/* Execute the program */
-				argc = 2;
-				argv[1] = argv[0];
+				//argc = 2;
+				//argv[1] = argv[0];
+				// fix: move all arguments back once instead of discarding them
+				for (i = min(argc,MAX_ARGS-1); i > 0; i--) {
+					argv[i] = argv[i-1];
+				}
+				argc++;
 				argv[0] = "exec";
 				exec(argc, argv);
 			}
