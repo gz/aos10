@@ -19,10 +19,16 @@
 
 #include "frames.h"
 
-#define verbose 3
+#define verbose 1
 
-/** Reduces the number of frames to 10 */
+/** Enable this to reduces the number of frames to SWAP_FRAMES_LIMIT */
 //#define SWAP_TEST 1
+/**
+ * Frame limit in case SWAP_TEST is defined (make sure that this is strict greater
+ * than the amount of concurrent running processes.
+ **/
+#define SWAP_FRAMES_LIMIT 10
+
 #define BITS_PER_CHAR 8
 
 /** List elements used to maintain a list of the free frames */
@@ -182,7 +188,7 @@ void frame_init(L4_Word_t low, L4_Word_t high) {
 	dprintf(2, "Stack count now is: %d\n", stack_count);
 
 	#ifdef SWAP_TEST
-	stack_count = 10;
+	stack_count = SWAP_FRAMES_LIMIT;
 	dprintf(0, "WARNING: running with artificially decreased frame number: %d\n", stack_count);
 	#endif
 }
@@ -203,7 +209,7 @@ L4_Word_t frame_alloc(void) {
 		return frame;
 	}
 	else {
-		dprintf(0, "WARNING: %s: Ran out of physical memory :-(.\n", __FUNCTION__);
+		dprintf(1, "WARNING: %s: Ran out of physical memory :-(.\n", __FUNCTION__);
 		return (L4_Word_t) NULL;
 	}
 

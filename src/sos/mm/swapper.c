@@ -56,7 +56,7 @@
 #include "swapper.h"
 #include "frames.h"
 
-#define verbose 3
+#define verbose 2
 
 /** Amount of bytes read/written from/to swap file per call */
 #define BATCH_SIZE 512
@@ -194,7 +194,7 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 			if(page->to_swap == 0) {
 				if(!is_referenced(page)) {
 
-					dprintf(0, "page is swapped out\n");
+					dprintf(1, "page is swapped out\n");
 					if(!page->process_deleted) {
 						frame_free(CLEAR_LOWER_BITS(pte->address));
 						mark_swapped(pte, page->swap_offset);
@@ -210,6 +210,7 @@ static void swap_write_callback(uintptr_t token, int status, fattr_t *attr) {
 
 				}
 				else {
+					dprintf(1, "page is swapped out but referenced in the mean time\n");
 					// page has been referenced inbetween swapping out
 					// we need to restart the whole swap procedure
 					TAILQ_REMOVE(&swapping_pages_head, page, entries);
@@ -402,7 +403,7 @@ int swap_out(L4_ThreadId_t initiator) {
 	if(page->swap_offset < 0 && (page->swap_offset = allocate_swap_entry()) < 0)
 		return OUT_OF_SWAP_SPACE;
 
-	dprintf(3, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X swap_offset:0x%X\n", page->tid, page->virtual_address, page->swap_offset);
+	dprintf(1, "swap_out: Second chance selected page: thread:0x%X vaddr:0x%X swap_offset:0x%X\n", page->tid, page->virtual_address, page->swap_offset);
 
 	if(is_dirty(page)) {
 		dprintf(1, "Selected page is dirty, need to write to swap space\n");

@@ -36,7 +36,7 @@
 #include "nslu2.h"
 #include "../../../sos/libsos.h"
 
-#define verbose 0
+#define verbose 1
 
 // Internal Driver Functions
 static timestamp_t current_timestamp_high = 0ULL;
@@ -204,7 +204,7 @@ int timer0_irq(L4_ThreadId_t tid, L4_Msg_t* msg_p) {
 			}
 			else {
 				// set alarm and return
-				dprintf(0, "Next alarm in: %lld us, register is:0x%X\n", delay, (*(L4_Word_t*)OST_TIM0_RL) );
+				dprintf(1, "Next alarm in: %lld us, register is:0x%X\n", delay, (*(L4_Word_t*)OST_TIM0_RL) );
 
 				TIMER0_SET(MICROSECONDS_TO_TICKS(delay));
 				TIMER0_START();
@@ -295,7 +295,7 @@ void remove_timers(L4_ThreadId_t tid) {
 	// if the queue head belongs to this tid remove the head and restart the timer
 	// do this as long as the new queue head also belongs to this tid
 	while (L4_IsThreadEqual(timer_queue_head->owner,tid)) {
-		dprintf(0,"remove head of timer queue, belonging to tid = %d\n", tid.raw);
+		dprintf(2,"remove head of timer queue, belonging to tid = %d\n", tid.raw);
 		alarm_timer* to_delete = timer_queue_head;
 		timer_queue_head = timer_queue_head->next_alarm;
 
@@ -314,7 +314,7 @@ void remove_timers(L4_ThreadId_t tid) {
 		dprintf(0,"walking timer queue, entry belongs to tid = 0x%X\n", (*atp)->owner);
 
 		if(L4_IsThreadEqual((*atp)->next_alarm->owner,tid)) {
-			dprintf(0,"remove entry from timer queue, belonging to tid = 0x%X\n", tid);
+			dprintf(2,"remove entry from timer queue, belonging to tid = 0x%X\n", tid);
 			alarm_timer* to_delete = (*atp)->next_alarm;
 			(*atp)->next_alarm = (*atp)->next_alarm->next_alarm;
 			free(to_delete);
