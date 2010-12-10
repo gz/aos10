@@ -436,6 +436,7 @@ int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		return IPC_SET_ERROR(-1);
 
 	pid_t pid = L4_MsgWord(msg_p, 0);
+	dprintf("waitfor tid:0x%X wait on pid:%d\n", tid, pid);
 
 	if(pid == -1) {
 		p->wait_for = L4_anythread;
