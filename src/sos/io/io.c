@@ -393,7 +393,7 @@ int get_dirent(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 
 	if(pos == file_cache_next_entry)
 		return IPC_SET_ERROR(0);
-	if(pos > file_cache_next_entry)
+	if(pos > file_cache_next_entry || pos < 0)
 		return IPC_SET_ERROR(-1);
 
 	int to_copy = strlen(file_cache[pos]->filename);

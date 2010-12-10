@@ -17,6 +17,7 @@ int main(void) {
 	///
 	/// TIMER SYSCALLS
 	///
+
 	// Testing Timestamp Syscall
 	uint64_t t1 = time_stamp();
 	uint64_t t2 = time_stamp();
@@ -32,6 +33,7 @@ int main(void) {
 	///
 	/// PROCESS SYSCALLS
 	///
+
 	// Test process create
 	assert(process_create(NULL) == EXECUTABLE_NOT_FOUND);
 	assert(process_create("nonexisting file") == EXECUTABLE_NOT_FOUND);
@@ -68,6 +70,9 @@ int main(void) {
 	///
 	/// IO SYSCALLS
 	///
+
+	char buf[100];
+
 	// Test open call
 	assert(open(NULL, O_RDWR) == -1);
 
@@ -94,9 +99,9 @@ int main(void) {
 	process_delete(c_pid);
 
 	// now reading should work again
-	assert( open("console", O_RDWR) >= 0);
+	assert( (fd = open("console", O_RDWR)) >= 0);
 	close(fd);
-	assert( open("console", O_RDONLY) >= 0);
+	assert( (fd = open("console", O_RDONLY)) >= 0);
 	close(fd);
 
 	// Test close call
@@ -108,16 +113,42 @@ int main(void) {
 	assert(close(fd) == 0);
 
 	// Test read call
-	char buf[100];
 	assert(read(1, buf, 10) == -1);
 	assert(read(-1, buf, 10) == -1);
 	assert(read(-22, buf, 10) == -1);
 	assert(read(PROCESS_MAX_FILES, buf, 10) == -1);
 	assert(read(99, buf, 10) == -1);
 
-	fd = open("bootimg.bin", O_RDWR);
+	fd = open("bootimg.bin", O_RDONLY);
 	assert(fd >= 0);
 	assert(read(fd, NULL, 10) == -1);
 	assert(read(fd, buf, 10) == 10);
 	close(fd);
+
+	// Test write call
+	assert(write(1, buf, 10) == -1);
+	assert(write(-1, buf, 10) == -1);
+	assert(write(-22, buf, 10) == -1);
+	assert(write(PROCESS_MAX_FILES, buf, 10) == -1);
+	assert(write(99, buf, 10) == -1);
+
+	fd = open("file", O_WRONLY);
+	assert(fd >= 0);
+	assert(write(fd, NULL, 10) == -1);
+	assert(write(fd, buf, 10) <= 10);
+	close(fd);
+
+	// Test getdirent
+	assert(getdirent(0, NULL, 10) == -1); // invalid buffer
+	assert(getdirent(9999, name, 10) == -1); // non existent entry
+	assert(getdirent(-1, name, 10) == -1); // non existent entry
+	assert(getdirent(0, name, 10) <= 10);
+
+	// Test stat
+	stat_t stat_buffer;
+	assert(stat(NULL, NULL) == -1); // invalid file & buffer
+	assert(stat(NULL, &stat_buffer) == -1); // invalid file
+	assert(stat("nonexisting file", &stat_buffer) == -1); // invalid file
+	assert(stat("console", NULL) == -1); // invalid buffer
+	assert(stat("console", &stat_buffer) == 0);
 }

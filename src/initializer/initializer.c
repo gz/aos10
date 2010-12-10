@@ -34,6 +34,7 @@ int main(void) {
 		copy_to += bytes_read;
 	}
 	int ret = elf_loadFile(elf_buffer, 0);
+	close(fd);
 
 	process_start(ret);
 	return 0;

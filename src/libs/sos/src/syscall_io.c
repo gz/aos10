@@ -100,8 +100,9 @@ int write(fildes_t file, const char* buf, size_t nbyte) {
     	assert(L4_UntypedWords(tag) == 1);
 
     	int sent = L4_MsgWord(&msg, 0);
-
-    	if(sent != to_send)
+    	if(sent < 0)
+    		return sent;
+    	else if(sent != to_send)
     		return nbyte - not_sent_count; // out of memory, don't write anymore
 
     	not_sent_count -= to_send;
