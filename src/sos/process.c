@@ -60,7 +60,7 @@ static L4_BootRec_t* find_boot_executable(const char* name) {
  * @param tid Thread ID
  * @return pid for the thread
  */
-static inline pid_t tid2pid(L4_ThreadId_t tid) {
+inline pid_t tid2pid(L4_ThreadId_t tid) {
 	return L4_ThreadNo(tid) >> RESERVED_ID_BITS;
 }
 
@@ -91,10 +91,11 @@ static void wait_wakeup(L4_ThreadId_t finished_thread) {
 		process* p = &ptable[i];
 
 		if(p->is_active && !L4_IsNilThread(p->wait_for) && (L4_IsThreadEqual(p->wait_for, finished_thread) || L4_IsThreadEqual(p->wait_for, L4_anythread))) {
-			dprintf(0, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
+			dprintf(2, "waking up p:0x%X because it waits for:0x%X", p->tid, p->wait_for);
 			send_ipc_reply(p->tid, SOS_PROCESS_WAIT, 1, tid2pid(finished_thread));
 			p->wait_for = L4_nilthread;
 		}
+
 	}
 
 }
@@ -249,7 +250,6 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	char name[N_NAME+1];
 	memcpy(name, buf, N_NAME);
 	name[N_NAME] = '\0';
-	dprintf(0, "name is:%s\n", name);
 	int file_cache_index = find_file(name);
 
 	if(file_cache_index == -1) {
@@ -280,7 +280,7 @@ int create_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 				L4_Version(pentry->tid) == 1
 		);
 
-		dprintf(0, "Created task: ox%X (pentry->tid:ox%X) pid:%d\n", newtid, pentry->tid, tid2pid(newtid));
+		dprintf(1, "Created task: ox%X (pentry->tid:ox%X) pid:%d\n", newtid, pentry->tid, tid2pid(newtid));
 		return set_ipc_reply(msg_p, 1, tid2pid(newtid));
 	}
 
@@ -316,7 +316,9 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 		L4_AbortIpc_and_stop_Thread(tid);
 
 		// unmap and free heap memory region
+		L4_Msg_t msg;
 		pager_unmap_initializer(tid);
+		pager_unmap_all(tid, &msg, NULL);
 		pager_unmap_range(tid,HEAP_START,HEAP_END);
 		pager_free_range(tid,HEAP_START,HEAP_END);
 
@@ -328,9 +330,10 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	else {
 		// could not load elf file, delete process (with staged IPC message contents)
 		L4_Msg_t msg;
+		L4_MsgClear(&msg);
 		L4_MsgAppendWord(&msg, tid2pid(tid));
 		delete_process(tid, &msg, NULL);
-		dprintf(0,"process has been deleted again, because elf file could not be loaded\n");
+		dprintf(0, "Process has been deleted again, because of invalid ELF file.\n");
 	}
 
 	return 0;
@@ -354,7 +357,6 @@ int start_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
  * we aborted before) otherwise we send back the killed pid.
  */
 int delete_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
-
 	if(L4_UntypedWords(msg_p->tag) != 1)
 		return IPC_SET_ERROR(-1);
 
@@ -443,7 +445,7 @@ int wait_process(L4_ThreadId_t tid, L4_Msg_t* msg_p, data_ptr buf) {
 	}
 	else {
 		process* wait_process = get_process(pid2tid(pid));
-		if(wait_process == NULL) {
+		if(!wait_process->is_active) {
 			return set_ipc_reply(msg_p, SOS_PROCESS_WAIT, 1, pid);
 		}
 

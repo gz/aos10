@@ -40,5 +40,6 @@ void process_init(void);
 process* get_process(L4_ThreadId_t tid);
 process* register_process(char* name);
 inline L4_ThreadId_t pid2tid(pid_t);
+inline pid_t tid2pid(L4_ThreadId_t);
 
 #endif /* PROCESS_H_ */

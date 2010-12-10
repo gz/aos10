@@ -69,7 +69,7 @@ for(int i=0; i<4096; i++) {
 #include "../libsos.h"
 #include "../datastructures/bitfield.h"
 
-#define verbose 2
+#define verbose 1
 
 // Return codes for virtual_mapping()
 #define MAPPING_FAILED 0
@@ -399,8 +399,12 @@ int pager(L4_ThreadId_t tid, L4_Msg_t *msgP)
 	dprintf(1, "PAGEFAULT: pager(tid: %X,\n\t\t faulting_ip: 0x%X,\n\t\t faulting_addr: 0x%X,\n\t\t fault_reason: 0x%X)\n", tid, ip, addr, fault_reason);
 
 	if(!is_access_granted(tid, addr, fault_reason)) {
-		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region.\n", tid, addr, fault_reason, get_access_rights(tid, addr));
-		L4_KDB_Enter("panic");
+		dprintf(0, "Thread:%X is trying to access memory location (0x%X) for rwx:0x%X\nbut it only has rights 0x%X in this region. We killed it!\n", tid, addr, fault_reason, get_access_rights(tid, addr));
+		L4_Msg_t msg;
+		L4_MsgClear(&msg);
+		L4_MsgAppendWord(&msg, tid2pid(tid));
+		delete_process(tid, &msg, NULL);
+		return 0;
 	}
 
 	if(addr < VIRTUAL_START) {

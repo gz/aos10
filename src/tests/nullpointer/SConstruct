@@ -1,0 +1,6 @@
+Import("*")
+
+sources=Split("nullpointer.c")
+obj = env.MyProgram("null", sources, LIBS=["c", "l4", "sos", "sos_shared"])
+
+Return("obj")

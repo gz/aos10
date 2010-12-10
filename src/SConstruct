@@ -78,10 +78,11 @@ app6 = app_env.Application("tests/infinite_read")
 app7 = app_env.Application("tests/infinite_create")
 app8 = app_env.Application("tests/max_concurrent_process")
 app9 = app_env.Application("tests/thrash")
+app10 = app_env.Application("tests/nullpointer")
 
 # Bootimage takes a comma seperated list of Applications that are linked
 # together into a single bootimg.bin binary.
 bootimg = env.Bootimage(l4kernel, sos, initializer)
-Default(bootimg, app1, app2, app3, app4, app5, app6, app7, app8, app9) # Default build target is the bootimage.
+Default(bootimg, app1, app2, app3, app4, app5, app6, app7, app8, app9, app10) # Default build target is the bootimage.
 
 # vim:ft=python:
