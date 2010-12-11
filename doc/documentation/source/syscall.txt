@@ -3,65 +3,46 @@
 System Call Interface
 =====================
 
-Operations which directly involve hardware, i.e. accessing the network, files or the CPU
-timer, can only be executed by the SOS Server, the only thread besides the L4 kernel that
-is allowed to execute priviledged code (accessing hardware is priviledged).
+Operations which directly involve hardware, i.e. accessing the network, files or the CPU timer, can only be executed by the SOS server, the only thread besides the L4 kernel that is allowed to execute priviledged code (accessing hardware is priviledged).
 
-Therefore, whenever a user programm wants to access something involving hardware, it has to
-ask the SOS Server to do it. The System Call Interface is the way how user programs
-communicate with the SOS Server in such situations.
+Therefore, whenever user programs wants to access something involving hardware, they have to ask the SOS server to do it for them. The System Call Interface is the way how user programs communicate with the SOS server in such situations.
 
-In L4, the only way in which different threads can communicate with each other is through
-interprocess communication (IPC), so this is also used to implement the functionality of
-the system calls. Implementing IPC was the goal of the project milestone 0. To solve it, we
-more or less only put together all the L4 calls necessary to send one message. But already
-during work for milestone 1, we realized that because of the fact, that we need to send
-an IPC message for every system call, there would be a lot of repeated code for every
-single system call function.
+In L4, the only way in which different threads can communicate with each other is through :abbr:`IPC (interprocess communication)`, therefore :abbr:`IPC (interprocess communication)` is also used to implement the functionality of the system calls. Implementing :abbr:`IPC (interprocess communication)` was the goal of the project milestone 0. To solve it, we more or less only put together all the L4 calls necessary to send one message. But already during work for milestone 1, we realized that because of the fact, that we need to send an :abbr:`IPC (interprocess communication)` message for every system call, there would be a lot of dupicated code for all the different system call functions.
 
-Therefore we created a shared header file :file:`syscalls.h` that could be included by both
-the SOS Server and the libsos library::
+Therefore we designed a more generalized way of handling the system calls, which has parts in both the SOS server code and the libsos library code. But before describing each of these parts, we need to look at how they will be able to understand each other first. For this, we created a shared header file :file:`syscalls.h`, that defines identifiers for all the system calls we implemented:
 
-  /**
-   * Identifiers for sos syscalls.
-   */
+.. _syscalls.h:
+.. literalinclude:: ../../../src/libs/sos_shared/include/syscalls.h
+   :language: c
+   :tab-width: 4
+   :linenos:
+   :lines: 11-37
 
-  #ifndef SYSCALLS_H_
-  #define SYSCALLS_H_
+Server
+------
 
-  #define GET_SYSCALL_NR(t)	((short) L4_Label(t) >> 4)
-  #define CREATE_SYSCALL_NR(t)	(t << 4)
+On the side of the SOS server, we then created a function table that maps each of these constants to an actual handler function inside the SOS server. The switch statement in the system call loop consists now only of three cases, two for the page fault and timer interrupts and the third for calling all the respective handler functions. The handler functions have the following signature::
 
-  // Some IPC labels defined in the L4 documentation
-  #define L4_PAGEFAULT	((L4_Word_t) -2)
-  #define L4_INTERRUPT	((L4_Word_t) -1)
+   typedef int(*syscall_function_ptr)(L4_ThreadId_t, L4_Msg_t*, data_ptr);
 
-  // IO Syscall Labels
-  #define SOS_OPEN 			 0
-  #define SOS_READ 			 1
-  #define SOS_WRITE 			 2
-  #define SOS_CLOSE 			 3
-  #define SOS_GETDIRENT 		 4
-  #define SOS_STAT 			 5
+Inputs are the thread ID of the initiating user process, the :abbr:`IPC (interprocess communication)` message recieved from that process and a physical memory address pointing to the user threads dedicated :abbr:`IPC (interprocess communication)` frame [#f_IPC]_. The return value is an integer that specifies if the system call loop is supposed to immediately send a reply message (which has to be loaded into the message registers by the handler function before) to the user thread (return is 1) or not (return is 0). This is done to be able to use L4s special :abbr:`IPC (interprocess communication)` speedup function ``L4_ReplyWait``.
 
-  // Process Syscall Labels
-  #define SOS_PROCESS_CREATE		 6
-  #define SOS_PROCESS_START		 7
-  #define SOS_PROCESS_DELETE		 8
-  #define SOS_PROCESS_ID 		 9
-  #define SOS_PROCESS_STATUS		10
-  #define SOS_PROCESS_WAIT 		11
-  #define SOS_PROCESS_GET_NAME		12
+If a system call handler function does not immediately reply to the user thread (because the server has to wait for a callback), the callback function needs to send the reply to the user thread in order to enable the user program to continue!
 
-  // IO Syscall Labels
-  #define SOS_SLEEP 			13
-  #define SOS_TIMESTAMP 		14
+User threads
+------------
 
-  // Debug Syscall Labels
-  #define SOS_UNMAP_ALL			15
+On the side of the user processes, there is the libsos library that contains all the necessary functions to interface with the SOS server. The library contains of course the :ref:`header file with the system call identifiers <syscalls.h>`, but also a generic function that takes care of all the assembling of the :abbr:`IPC (interprocess communication)` message that is needed for a system call:
 
-  #endif /* SYSCALLS_H_ */
+.. literalinclude:: ../../../src/libs/sos/src/sos.c
+   :language: c
+   :tab-width: 4
+   :linenos:
+   :lines: 8-35
 
+Inputs are the system call type (one of the defines in :ref:`syscalls.h`), a pointer to a L4 message structure and the number of following ``L4_Word_t`` values (it's a variable input function). The message structure pointer is actually an output parameter wherein the result message will be constructed and therefore does not need to be passed initialized (the ``system_call`` function will initialize it). The function clears the message (``L4_MsgClear``) and appends all the provided ``L4_Word_t`` values to it. It's assumed that the message data has already be copied into the shared memory region before ``system_call`` is called. The function then loads the message and calls ``L4_Call``, which sends the :abbr:`IPC (interprocess communication)` message and blocks the thread until the reply message arrives. After waking up, the function checks the reply on errors and returns the message tag to the caller.
 
-that implemented special functions both for the SOS Server
-and also for the libsos library, that take care of assembling the message
+The libsos library also contains a lot of functions that nicely wrap up the different system calls. They are described in the sections :ref:`io-subsystem` and :ref:`process`.
+
+.. rubric:: Footnotes
+.. [#f_IPC] We implemented :abbr:`IPC (interprocess communication)` to use shared memory. Each user process has one memory frame mapped with caching disabled at a specific virtual address. Before sending a message to the server, the user process copies the message data to that address. Then upon recieving a message, the server does an address lookup in the user process' page table to acquire access to the physical memory frame corresponding to the user process' :abbr:`IPC (interprocess communication)` memory. The server reads the data, processes the request and writes the resulting data into the memory frame. Then he sends the :abbr:`IPC (interprocess communication)` reply to wake up the user thread which then is able to read the result data in its own address space again.
