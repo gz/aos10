@@ -20,6 +20,9 @@ the project would evolve.
   reading and writing files on the NFS server as well as reading and writing 
   from and to the serial port.
 
+* Chapter :ref:`clock-driver` describes the driver code to access the CPU clock timer
+  and also the benchmark program to test the speed of the file system.
+
 * Chapter :ref:`process` contains information about how we manage
   user processes in the root server.
 

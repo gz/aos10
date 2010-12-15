@@ -10,6 +10,7 @@ Contents:
    mm.txt
    syscall.txt
    io.txt
+   clock.txt
    process.txt
 
 Indices and tables
