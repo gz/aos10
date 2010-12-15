@@ -4,9 +4,9 @@ Memory Management
 =================
 Memory management related code resides within the src/sos/mm/ directory. It consists of
 three parts:
- - Frame Management
- - Pager (Handles process pagefault)
- - Swapping (Swaps pages in and out of physical memory)
+- Frame Management
+- Pager (Handles process pagefault)
+- Swapping (Swaps pages in and out of physical memory)
 
 `Read More`: To test swapping you can reduce the number of frames artificially....
 
@@ -36,7 +36,7 @@ processes.
 
 
 Functioning of the Pager
-----------------------
+------------------------
 The flow chart below shows the functioning of our pager in general if it receives a
 pagefault from a user process.
 
