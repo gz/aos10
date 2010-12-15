@@ -2,3 +2,66 @@
 
 Memory Management
 =================
+Memory management related code resides within the src/sos/mm/ directory. It consists of
+three parts:
+ - Frame Management
+ - Pager (Handles process pagefault)
+ - Swapping (Swaps pages in and out of physical memory)
+
+`Read More`: To test swapping you can reduce the number of frames artificially....
+
+Virtual Address Space Layout
+----------------------------
+The address space for a process is set up according to the following diagram:
+
+You may notice that everything below 0x2000000 is not accessable. The reason for
+this is that loading of an ELF binary and copying text and data sections
+is done by a privileged piece of code running in the same address space 
+but with the capability to access physical memory directly 
+(i.e. everything below 0x2000000).
+
+Virtual Address Layout
+----------------------
+We use a fixed page size of 4096 bytes which requires us to use a 12 bit offset
+in our virtual address. Since the CPU has a word size of 32 bit we can address 2^20 frames
+with the remaining 20 bits (and since the NSLU2 has only about 30 MB RAM
+this is more than enough).
+We decided to use a 2 level page table using the top 12 bits
+of an address as an index in the page directory (1st level) and the following 8 bits
+as an index in the second level page table. All page tables are stored in the heap
+memory of the SOS Server (which we set up to use a reserved region of 5 MB in
+physical memory). This approach favors simplicity but it probably would have been
+better to use physical frames for better scalability with multiple concurrent
+processes.
+
+
+Functioning of the Pager
+----------------------
+The flow chart below shows the functioning of our pager in general if it receives a
+pagefault from a user process.
+
+[[ diagram ]]
+
+As we can see, once the system needs to swap out a page we select a page based on
+second chance. We implemented second chance using a queue where we keep all
+the pages currently associated with a physical frame in it. If one takes a look
+at the structure `page_queue_item` he will notice that we store a bunch of other
+information there to help us identify to which process this frame belongs and
+to find the correct swap offset as well as the corresponding entry in the
+page table. While a page is swapped out it's corresponding `page_queue_item` is
+inserted in the `swapping_queue`. This is needed because swapping in and out 
+leads to an asynchronous NFS callback in the server so in case a process 
+gets deleted while its waiting for a pagefault we need to be able to detect this
+in the callback.
+
+This diagram should help understanding the different states a page can be in
+and what the transitions are:
+
+[[ diagram ]]
+
+`Read More`: The ARM CPU does not provide reference and dirty bits. We simulated the
+reference bit by mapping and unmapping the page in the hardware pagetable. The dirty bit
+is stored in the lower 12 bits of our software page table. If a page referenced for the
+first time it is always marked as dirty. This is needed because in the beginning nothing
+is swapped out. Once a page is swapped out the dirty bit is cleared in the pagetable
+but gets reset again if the page is mapped with write access in the future.

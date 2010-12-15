@@ -2,3 +2,29 @@
 
 Process
 ============
+
+Process Table
+----------------
+We use a hash table of fixed size to store our process descriptor (see type `process`).
+This means that we limit the number of concurrently running processes to the size
+of this table (which at the moment is 128). If one requires a higher amount here
+he can adjust the value MAX_RUNNING_PROCESS in process.h. However since the key to find
+a process in the table is the corresponding thread ID it also requires careful
+adjustment to the `tid2pid` helper function.
+
+Process Creation
+----------------
+A process is created in two steps: First an initializer program, using the same address space
+as the later process, runs and loads the ELF binary from the file system into the correct
+memory locations. The nice thing about this is that the initializer can just use memcopy 
+to copy the different ELF section in the virtual address space and everything else is handled 
+by the pager. However since the initializer resides within the bootimg.bin file we need to distinguish
+between running the initializer and running the ELF process since we have slightly different access
+rights in the pager. This is done by a flag in our process descriptor.
+
+[[ diagram process lifecycle ]]
+
+
+Process Deletion
+----------------
+
