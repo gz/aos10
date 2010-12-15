@@ -44,16 +44,21 @@ processes.
 Functioning of the Pager
 ------------------------
 The demand paging was probably the most difficult part of the project. In this 
-chapter we try  to give an overview of the interactions between a user space process 
-our sos kernel and the network. For this we made some some sequence diagrams for 
-the more involved cases that can happen.
+chapter we try  to give an overview with sequence diagrams of the interactions
+between a user space process our sos kernel and the network.
 
+The first diagrams (see :ref:`swap-out-sequence`) shows the steps taken in case
+a certain memory region is accessed for the first time (this means that the page
+is not swapped and there exists no mapping in the software or hardware pagetable
+for it).
+
+.. _swap-out-sequence:
 
 .. figure:: _images/swap_out_sequence.png
     :scale: 180%
     :alt: Sequence Diagram for swapping out a page
 
-    Sequence Diagram shows the steps involved for swapping a page out of physical memory.
+    Steps to access a page for the first time.
 
 As we can see, once the system needs to swap out a page we select a page based on
 second chance. We implemented second chance using a queue where we keep all
