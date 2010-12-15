@@ -8,17 +8,23 @@ three parts:
 - Pager (Handles process pagefault)
 - Swapping (Swaps pages in and out of physical memory)
 
-`Read More`: To test swapping you can reduce the number of frames artificially....
+.. hint:: To test the Swapping it is recommended to reduce the number of physical frames artificially. This can be done by uncommenting `SWAP_TEST` (frames.c:25). The amount of frames then is defined through `SWAP_FRAMES_LIMIT` (frames.c:30).
+
+
 
 Virtual Address Space Layout
 ----------------------------
 The address space for a process is set up according to the following diagram:
+
+.. image:: _images/address_space.png
+    :width: 110%
 
 You may notice that everything below 0x2000000 is not accessable. The reason for
 this is that loading of an ELF binary and copying text and data sections
 is done by a privileged piece of code running in the same address space 
 but with the capability to access physical memory directly 
 (i.e. everything below 0x2000000).
+
 
 Virtual Address Layout
 ----------------------
@@ -31,16 +37,23 @@ of an address as an index in the page directory (1st level) and the following 8 
 as an index in the second level page table. All page tables are stored in the heap
 memory of the SOS Server (which we set up to use a reserved region of 5 MB in
 physical memory). This approach favors simplicity but it probably would have been
-better to use physical frames for better scalability with multiple concurrent
+wise to use physical frames for better scalability with multiple concurrent
 processes.
 
 
 Functioning of the Pager
 ------------------------
-The flow chart below shows the functioning of our pager in general if it receives a
-pagefault from a user process.
+The demand paging was probably the most difficult part of the project. In this 
+chapter we try  to give an overview of the interactions between a user space process 
+our sos kernel and the network. For this we made some some sequence diagrams for 
+the more involved cases that can happen.
 
-[[ diagram ]]
+
+.. figure:: _images/swap_out_sequence.png
+    :scale: 180%
+    :alt: Sequence Diagram for swapping out a page
+
+    Sequence Diagram shows the steps involved for swapping a page out of physical memory.
 
 As we can see, once the system needs to swap out a page we select a page based on
 second chance. We implemented second chance using a queue where we keep all
