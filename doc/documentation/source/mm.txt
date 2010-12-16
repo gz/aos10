@@ -4,11 +4,12 @@ Memory Management
 =================
 Memory management related code resides within the src/sos/mm/ directory. It consists of
 three parts:
-- Frame Management
-- Pager (Handles process pagefault)
-- Swapping (Swaps pages in and out of physical memory)
 
-.. hint:: To test the Swapping it is recommended to reduce the number of physical frames artificially. This can be done by uncommenting `SWAP_TEST` (frames.c:25). The amount of frames then is defined through `SWAP_FRAMES_LIMIT` (frames.c:30).
+#. Frame Management
+#. Pager (Handles process pagefault)
+#. Swapping (Swaps pages in and out of physical memory)
+
+.. hint:: To test the Swapping it is recommended to reduce the number of physical frames artificially. This can be done by uncommenting `SWAP_TEST` (frames.c:25). The amount of frames is then defined through `SWAP_FRAMES_LIMIT` (frames.c:30).
 
 
 
@@ -44,42 +45,66 @@ processes.
 Functioning of the Pager
 ------------------------
 The demand paging was probably the most difficult part of the project. In this 
-chapter we try  to give an overview with sequence diagrams of the interactions
-between a user space process our sos kernel and the network.
+chapter we try to give an overview of the interactions between a user space process
+our sos kernel and the network during pagefaults.
 
-The first diagrams (see :ref:`swap-out-sequence`) shows the steps taken in case
+The first diagram (see :ref:`swap-out-sequence`) shows the steps taken in case
 a certain memory region is accessed for the first time (this means that the page
 is not swapped and there exists no mapping in the software or hardware pagetable
-for it).
+for it). As we can see, once the system needs to swap out we select a page 
+based on the second chance algorithm. We implemented second chance using a queue
+where we keep all the pages currently associated with a physical frame in it.
+Notice that in the diagrams the entities Pager, Swapper and NFS handler are not
+separate processes but refer to functions located in different code files.
+To give a better overview we decided to split it up anyways even though all 
+of this functions are called in the SOS syscall loop.
 
 .. _swap-out-sequence:
 
 .. figure:: _images/swap_out_sequence.png
-    :scale: 180%
-    :alt: Sequence Diagram for swapping out a page
+    :scale: 100%
+    :alt: Sequence Diagram: First time page access
 
-    Steps to access a page for the first time.
+    Access a page for the first time
 
-As we can see, once the system needs to swap out a page we select a page based on
-second chance. We implemented second chance using a queue where we keep all
-the pages currently associated with a physical frame in it. If one takes a look
-at the structure `page_queue_item` he will notice that we store a bunch of other
-information there to help us identify to which process this frame belongs and
-to find the correct swap offset as well as the corresponding entry in the
-page table. While a page is swapped out it's corresponding `page_queue_item` is
+If one takes a look at the structure `page_queue_item` (swapper.h:9)
+he will notice that we store a bunch of information there to help
+us identify to which process a page belongs, to find the correct swap offset 
+as well as the corresponding entry in the page table. 
+While a page is swapped out it's corresponding `page_queue_item` is
 inserted in the `swapping_queue`. This is needed because swapping in and out 
 leads to an asynchronous NFS callback in the server so in case a process 
-gets deleted while its waiting for a pagefault we need to be able to detect this
+is deleted while its waiting for a pagefault we need to be able to detect this
 in the callback.
 
-This diagram should help understanding the different states a page can be in
-and what the transitions are:
+The next diagram (see :ref:`swap-in-sequence`) shows the steps taken in case
+a page is requested which was already mapped before but currently does not
+exist in the hardware pagetable.
 
-[[ diagram ]]
+.. _swap-in-sequence:
 
-`Read More`: The ARM CPU does not provide reference and dirty bits. We simulated the
-reference bit by mapping and unmapping the page in the hardware pagetable. The dirty bit
-is stored in the lower 12 bits of our software page table. If a page referenced for the
-first time it is always marked as dirty. This is needed because in the beginning nothing
-is swapped out. Once a page is swapped out the dirty bit is cleared in the pagetable
-but gets reset again if the page is mapped with write access in the future.
+.. figure:: _images/swap_in_sequence.png
+    :scale: 100%
+    :alt: Sequence Diagram: Request a page
+
+    Requesting a previously mapped page
+
+As we can see we have to distinguish two cases:
+
+#. If the page is currently in the swap file we need to read it back into physical memory. Notice also that we create the corresponding `page_queue_item` before we called `nfs_read()` so we can pass a pointer to it as an argument which is handed over again later in the callback.
+#. If the page is already in physical memory we just update the hardware pagetable using `L4_MapFpage`.
+
+Now that we've seen the sequence patterns used to handle pagefaults we will take a closer look at the states a page can be in and how they affect our
+datastructures (see :ref:`page-state`).
+
+.. _page-state:
+
+.. figure:: _images/page_state.png
+    :scale: 100%
+    :alt: Page as a State Machine
+
+    Page as a State Machine
+
+* You may notice that once a page is dereferenced only pagefaults with read request can happen. This is because in L4 the first access to an unmapped page will always deliver a read page fault, even if the fault is from a write instruction. Once a page is mapped, subsequent faults will report the correct access.
+* Since the ARM CPU does not provide reference and dirty bits. We simulated the reference/dereference operation by mapping and unmapping the page in the hardware pagetable.
+* The dirty bit is stored in the lower 12 bits of our software page table. A page referenced for the first time it is always marked as dirty. This is needed because in the beginning nothing is swapped out. Once a page is swapped out the dirty bit is cleared in the pagetable but is reset again if the page gets mapped with write access in the future.
