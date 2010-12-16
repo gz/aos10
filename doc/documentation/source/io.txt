@@ -3,8 +3,143 @@
 IO Subsystem
 ============
 
+The Input Output Subsystem is the reason for the existence of the system call interface described in the last chapter. To avoid concurrency problems at accessing the hardware devices of the system, only the L4 kernel and the SOS server are allowed to do so. Of course the SOS server has to provide controlled access to the user processes, to enable them to do useful things. This chapter and the next chapter called :ref:`clock-driver` describe all the system calls we implemented that are connected to accessing the hardware of the system.
+
+File System
+-----------
+
+To understand the Serial IO and :abbr:`NFS (Network File System)` parts, we need to explain the design of our file system first. Not only the real files that we can access over the :abbr:`NFS (Network File System)`, but also the "Console", the only way a user can interact with our system, is modeled as a file residing in our file system. If a user program wants to write to the console or read from it, it simply opens the file called "console" like any other file and performs normal file writing/reading operations on it (see :ref:`serial-io` for details).
+
+SOS server parts
+^^^^^^^^^^^^^^^^
+
+The main part of the file system is defined in the :file:`src/sos/io` directory. The files :file:`io.h` and :file:`io.c` define the data structures that the file system is based upon. Our file system supports only one directory and a limited number of files (``DIR_CACHE_SIZE``). We maintain a file cache (a static array called ``file_cache``) that has ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system reads the root directory of the connected tftp host and creates a ``file_info`` for each file found. The system will not be able to access new files in the tftp root directory without restarting, unless they are created by our own file system of course.
+
+The ``file_info`` structure contains the following information:
+
+* ``char filename[MAX_PATH_LENGTH]``, a buffer for the name of the file.
+
+* ``stat_t status``, the file status (access rights, size, creation time, ...).
+
+* ``L4_Bool_t creation_pending``, a flag that tells us, if there is a callback for this files creation pending. This is needed if the process that has created the file is being deleted between creation call and callback, so that the callback function knows if it has to wake up the process or not (a dead process cannot be woken).
+
+* ``L4_ThreadId_t reader``, thread ID of the thread that has exclusive read access. This is needed only for the special "console" file (see :ref:`serial-io` for details).
+
+* ``struct serial* serial_handle``, serial handler, also only used for the special "console" file.
+
+* ``circular_buffer* cbuffer``, circular buffer, only used for the special "console" file.
+
+* ``struct cookie nfs_handle``, handle used by :abbr:`NFS (Network File System)` to identify the file.
+
+* ``void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t )``, function pointer to the file open function appropriate for this file.
+
+* ``void (*write) (struct fentry*)``, function pointer to the file write function appropriate for this file.
+
+* ``void (*read)  (struct fentry*)``, function pointer to the file read function appropriate for this file.
+
+* ``void (*close) (struct fentry*)``, function pointer to the file close function appropriate for this file.
+
+Because we save all the file operation functions as function pointers in the ``file_info`` structure for each file, we are able to define special files that have a particular behavior. This is only used for the so called "console" file at the moment, but could of course be used for any other functionality that can be accessed in the way one accesses a file. One simply defines the four file operation functions and links them into the respective ``file_info`` structure. See :ref:`serial-io` for details on the "console" file.
+
+The second data structure defined in :file:`io.h` is a structure called ``file_table_entry``. It is used to hold information about open files. Each user process in our system has its own file table which is initialized upon creation of the process. It contains entries of type ``file_table_entry``. If a file is created/opened, one of these structs is loaded and stored in the file table. The structure contains the following data:
+
+* ``file_info* file``, a pointer to the corresponding ``file_info``.
+
+* ``L4_ThreadId_t owner``, thread ID of the owner thread of this file table entry.
+
+* ``fmode_t mode``, mode in which the file was opened (read, write, read and write).
+
+* ``L4_Bool_t awaits_callback``, a flag that tells us, if there is any callback pending for this file. This is needed if the process that has invoked the operation on the file is being deleted between operation call and callback, so that the callback function knows if it has to wake up the process or not (a dead process cannot be woken).
+
+* ``data_ptr client_buffer``, a pointer to a user space memory location where we should write the data coming back from file reading.
+
+* ``L4_Word_t to_read``, the number of bytes to read (set by syscall ``read()``).
+
+* ``L4_Word_t to_write``, the number of bytes to write (set by syscall ``write()``).
+
+* ``L4_Word_t write_position``, the current write position in the file (used to handle multiple write calls).
+
+* ``L4_Word_t read_position``, the current read position in the file (used to handle multiple read calls).
+
+To enable the user processes to access the file system, there are system calls defined for all the different file operations.
+
+Libsos library parts
+^^^^^^^^^^^^^^^^^^^^
+
+On the side of the user processes we have convenient functions that wrap all the system calls related to the file system. Their signatures are:
+
+* ``fildes_t open(const char *path, fmode_t mode);``
+
+  Opens a file with the provided path/name, in the provided mode (read/write/read and write). The modes are defined in the shared header :file:`io_shared.h`. The function returns the file descriptor of the open file. The file descriptor is also saved in the file table of the process.
+
+* ``int close(fildes_t file);``
+
+  Closes an already open file. Returns a success value (0 == success).
+
+* ``int read(fildes_t file, char *buf, size_t nbyte);``
+
+  Reads ``nbyte`` bytes from the ``file`` into the buffer ``buf``. The function returns the number of bytes that have actually been read.
+
+* ``int write(fildes_t file, const char *buf, size_t nbyte);``
+
+  Writes ``nbyte`` bytes from the buffer ``buf`` into the ``file``. The function returns the number of bytes that have actually been written.
+
+* ``int getdirent(int pos, char *name, size_t nbyte);``
+
+  Copies the name of the file at the position ``pos`` in the tftp root direcory into the buffer ``name``. A maximum of ``nbyte`` bytes are copied and the function returns the number of bytes that have actually been copied.
+
+* ``int stat(const char *path, stat_t *buf);``
+
+  Returns the status of the file ``path`` in the structure ``buf``.
+
+
+
+.. _serial-io:
+
 Serial IO
 ---------
 
+The serial input output system is a very important part of the system, because it ultimately enables the user to communicate with our system. Since the NSLU2 system does not have a display but a network adapter, it has to send its output over the network to an instance of net cat running on the host computer. This is also the way in which a program running on our system can get inputs from the user.
+
+Reading from and writing to this kind of "console" are modeled as normal file access operations, but on a specially designed, virtual file.
+
+
+
+
 Network File System
 -------------------
+
+.. 
+   File System
+   * =============
+   * This file contains the handlers for read/write/open/close/stat/get_dirent
+   * syscalls.
+   *
+   * All files are tracked in the `file_table`. The file table entries
+   * are described io.h (`file_info`). The syscall handler here will usually
+   * look up the related file on the file_table and call it's corresponding
+   * open/close/read/write function. Which at the moment either point to
+   * a corresponding function in io_serial.c or io_nfs.c depending on whether
+   * we have to deal with a console or a nfs file.
+   *
+   * Open files are identified by a file descriptor which corresponds
+   * to the index of the given file handle in the file table. The layout
+   * of a `file_table_entry` is described in io.h.
+   *
+   * Every process comes with a pre initialized file descriptor 0 which
+   * has write capability for the console file. Note that the
+   * file descriptor 0 corresponds to the file descriptor stdout_fd.
+   *
+   * Limitations:
+   * ------------------------------------
+   * The NFS specific filehandles for every file as well as their attributes
+   * are read from the filesytem in the beginning (through io_init) and stored
+   * in a array called file_cache. This limits the files which we can handle
+   * to DIR_CACHE_SIZE.
+   *
+   * We introduced a maximum path length for open calls (MAX_PATH_LENGTH)
+   * atm this is 255 characters. Because of the way we share memory on IPC calls
+   * a limit of PAGESIZE would be possible without much effort.
+   *
+   * The number of concurrently open files for a given process is
+   * restricted by PROCESS_MAX_FILES (see process.h).
