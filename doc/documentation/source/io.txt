@@ -115,37 +115,7 @@ Also, every process gets created already with a pre-initialized file descriptor 
 Network File System
 -------------------
 
-.. 
-   File System
-   * =============
-   * This file contains the handlers for read/write/open/close/stat/get_dirent
-   * syscalls.
-   *
-   * All files are tracked in the `file_table`. The file table entries
-   * are described io.h (`file_info`). The syscall handler here will usually
-   * look up the related file on the file_table and call it's corresponding
-   * open/close/read/write function. Which at the moment either point to
-   * a corresponding function in io_serial.c or io_nfs.c depending on whether
-   * we have to deal with a console or a nfs file.
-   *
-   * Open files are identified by a file descriptor which corresponds
-   * to the index of the given file handle in the file table. The layout
-   * of a `file_table_entry` is described in io.h.
-   *
-   * Every process comes with a pre initialized file descriptor 0 which
-   * has write capability for the console file. Note that the
-   * file descriptor 0 corresponds to the file descriptor stdout_fd.
-   *
-   * Limitations:
-   * ------------------------------------
-   * The NFS specific filehandles for every file as well as their attributes
-   * are read from the filesytem in the beginning (through io_init) and stored
-   * in a array called file_cache. This limits the files which we can handle
-   * to DIR_CACHE_SIZE.
-   *
-   * We introduced a maximum path length for open calls (MAX_PATH_LENGTH)
-   * atm this is 255 characters. Because of the way we share memory on IPC calls
-   * a limit of PAGESIZE would be possible without much effort.
-   *
-   * The number of concurrently open files for a given process is
-   * restricted by PROCESS_MAX_FILES (see process.h).
+The code for accessing the "real" files on the tftp server on the host PC over Ethernet is found in the files :file:`io_nfs.h` and :file:`io_nfs.c`. These files contain the handlers for read, write, open, getdirent and stat system calls specific to the :abbr:`NFS (Network File System)`. The usual behaviour is that the ``create_nfs``, ``read_nfs`` and ``write_nfs`` call the :abbr:`NFS (Network File System)` library function which then calls a given callback function in return. Usually we use the token value as a pointer to the file handle and store all the information about what we need to do on a callback in the file handle.
+
+The only function that does not use a callback, which is registered to :abbr:`NFS (Network File System)`, is the ``open_nfs`` function. We don't need it because we already cache all the file information in the file cache array at boot time.
+
