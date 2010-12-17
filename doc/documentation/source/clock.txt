@@ -8,7 +8,7 @@ For milestone 5, we were supposed to create a driver for the IXP42X timer. The d
 Clock System Calls
 ------------------
 
-All the SOS server code associated with the clock driver is inside the two files :file:`clock.h` and :file:`clock.c`. On the user space side we just have two system call functions (``time_stamp`` and ``sleep``, implemented in :file:`sos.h` and :file:`syscall_timer.c`) and of course the whole benchmarking programm.
+All the SOS server code associated with the clock driver is inside the two files :file:`clock.h` and :file:`clock.c`. On the user space side we just have two system call functions (``time_stamp`` and ``sleep``, implemented in :file:`sos.h` and :file:`syscall_timer.c`) and of course the whole benchmarking programm (:file:`src/sosh/benchmark.c`).
 
 For the time stamp measurement we use the time stamp timer register of the IXP42X hardware and for sleep calls we use the general purpose timer 0.
 
@@ -26,7 +26,7 @@ The system call handler function for the time stamp retrieval function is called
 Sleep Timers
 ^^^^^^^^^^^^
 
-The general purpose timer 0 is programmed to give an interrupt whenever it reaches zero (in the system call loop, the received interrupt then comes from thread number ``NSLU2_TIMER0_IRQ``). In that case ``timer0_irq`` is called as the interrupt handler, which removes the head of the timer queue and restarts the timer with the finish time of the next queue entry. ``timer0_irq`` of course also calls the handler function associated with that timer. At the moment this is always the function ``wakeup`` which just sends the :abbr:`IPC (interprocess communication)` reply to the sleeping user process to wake it up. But the way we implemented it, we could extend it easily.
+The general purpose timer 0 is programmed to give an interrupt whenever it reaches zero (in the system call loop, the received interrupt then comes from thread number ``NSLU2_TIMER0_IRQ``). In that case ``timer0_irq`` is called as the interrupt handler, which removes the head of the timer queue and restarts the timer with the finish time of the next queue entry. ``timer0_irq`` of course also calls the handler function associated with that timer. At the moment this is always the function ``wakeup`` which just sends the :abbr:`IPC (interprocess communication)` reply to the sleeping user process to wake it up. But the way we implemented it, we could extend this easily.
 
 The sleep system call basically uses the function ``register_timer`` of the clock driver interface. ``register_timer`` will insert an ``alarm_timer`` structure into a priority queue and if the new timer has been inserted as the new queue head because it has a finishing time before the time of the old head of the queue, the timer is restarted with the new time.
 

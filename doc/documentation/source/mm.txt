@@ -48,7 +48,7 @@ Functioning of the Pager
 ------------------------
 Implementing demand paging was probably the most difficult part of the project. In this 
 chapter we try to give an overview of the interactions between a user space process,
-our sos kernel and the network during page faults.
+our SOS server and the network during page faults.
 
 The first diagram (see :ref:`swap-out-sequence`) shows the steps taken in case
 a certain memory region is accessed for the first time (this means that the page
@@ -59,7 +59,7 @@ where we keep all the pages currently associated with a physical frame.
 Notice that in the diagrams the entities Pager, Swapper and :abbr:`NFS (Network File System)` handler are not
 separate processes but rather refer to functions located in different code files.
 To give a better overview we decided to split it up anyways even though all 
-of these functions are called in the SOS syscall loop.
+of these functions are called in the SOS system call loop.
 
 .. _swap-out-sequence:
 
@@ -96,12 +96,12 @@ exist in the hardware page table.
 
     Requesting a previously mapped page
 
-As we can see we have to distinguish two cases:
+As we can see, we have to distinguish two cases:
 
-#. If the page is currently in the swap file we need to read it back into physical memory. Notice also that we create the corresponding ``page_queue_item`` before we called ``nfs_read()`` so we can pass its address as an argument which is handed back later in the callback.
-#. If the page is already in physical memory we just update the hardware page table using ``L4_MapFpage()``.
+#. If the page is currently in the swap file, we need to read it back into physical memory. Notice also that we create the corresponding ``page_queue_item`` before we called ``nfs_read()`` so we can pass its address as an argument which is handed back later in the callback.
+#. If the page is already in physical memory, we just update the hardware page table using ``L4_MapFpage()``.
 
-Now that we've seen the sequence patterns used to handle page faults we will take a closer look at the states a page can be in and how they affect our
+Now that we've seen the sequence patterns used to handle page faults, we will take a closer look at the states a page can be in and how they affect our
 data structures (see :ref:`page-state`).
 
 .. _page-state:
@@ -112,6 +112,6 @@ data structures (see :ref:`page-state`).
 
     Page as a State Machine
 
-* You may notice that once a page is dereferenced only page faults with read request can happen. This is because in L4 the first access to an unmapped page will always deliver a read page fault, even if the fault is from a write instruction. Once a page is mapped, subsequent faults will report the correct access.
-* Since the ARM CPU does not provide reference and dirty bits. We simulated the reference/dereference operation by mapping and unmapping the page in the hardware page table.
-* The dirty bit is stored in the lower 12 bits of our software page table. A page referenced for the first time it is always marked as dirty. This is needed because in the beginning nothing is swapped out. Once a page is swapped out the dirty bit is cleared in the page table but is reset again if the page gets mapped with write access in the future.
+* You may notice that once a page is dereferenced, only page faults with read request can happen. This is because in L4, the first access to an unmapped page will always deliver a read page fault, even if the fault is from a write instruction. Once a page is mapped, subsequent faults will report the correct access.
+* Since the ARM CPU does not provide reference and dirty bits, we simulated the reference/dereference operation by mapping and unmapping the page in the hardware page table.
+* The dirty bit is stored in the lower 12 bits of our software page table. A page referenced for the first time is always marked as dirty. This is needed because nothing is swapped out in the beginning. Once a page is swapped out, the dirty bit is cleared in the page table, but it is reset again if the page gets mapped with write access in the future.

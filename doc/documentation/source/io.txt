@@ -1,14 +1,14 @@
 .. _io-subsystem:
 
-IO Subsystem
-============
+I/O Subsystem
+=============
 
 The Input Output Subsystem uses a :abbr:`NFS (Network File System)` library to access files over the network and a serial library to support a console.
 
 File System
 -----------
 
-To understand the Serial IO and :abbr:`NFS (Network File System)` parts, we need to explain the design of our file system first. Not only the real files that we can access over the :abbr:`NFS (Network File System)`, but also the "Console", the only way a user can interact with our system, is modeled as a file residing in our file system. If a user program wants to write to the console or read from it, it simply opens the file called "console" like any other file and performs normal file writing/reading operations on it (see :ref:`serial-io` for details).
+To understand the Serial I/O and :abbr:`NFS (Network File System)` parts, we need to explain the design of our file system first. Not only the real files that we can access over the :abbr:`NFS (Network File System)`, but also the "console", the only way a user can interact with our system, is modeled as a file residing in our file system. If a user program wants to write to the console or read from it, it simply opens the file called "console" like any other file and performs normal file writing/reading operations on it (see :ref:`serial-io` for details).
 
 Server side implementation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -19,7 +19,7 @@ If we take a closer look at the ``file_info`` type (see :file:`io.h:14`) we can 
 
 The second data structure defined in :file:`io.h:36` is a structure called ``file_table_entry``. It is used to hold information about files which are currently opened by a process. Each user process has its own file table in the process descriptor. It contains pointers to the type ``file_table_entry``. If a file is created/opened, one of these structure is allocated and stored in the file table.
 
-To enable user processes to access the file system, there are system call handlers defined in :file:`io.c` for all the different file operations. These function do some general checks before dispatching to the corresponding function in the ``file_info`` structure. The specialized handler functions are located in :file:`io_serial.c` and :file:`io_nfs.c` respectively. An example of an I/O syscall is shown in the diagram :ref:`io-read`.
+To enable user processes to access the file system, there are system call handlers defined in :file:`io.c` for all the different file operations. These function do some general checks before dispatching to the corresponding function in the ``file_info`` structure. The specialized handler functions are located in :file:`io_serial.c` and :file:`io_nfs.c` respectively. An example of an I/O system call is shown in the diagram :ref:`io-read`.
 
 
 .. _serial-io:

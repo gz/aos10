@@ -3,7 +3,7 @@
 System Call Interface
 =====================
 
-Our system uses a monolithic design where the SOS server functions as a root task and handles all incoming syscalls. Since it is the only privileged thread in our system we can also use any kind of L4 calls there.
+Our system uses a monolithic design where the SOS server functions as a root task and handles all incoming system calls. Since it is the only privileged thread in our system we can also use any kind of L4 calls there.
 
 Therefore, whenever a process wants to use some hardware or privileged L4 system calls, they have to ask the SOS server to do it for them. The System Call Interface is the way how user programs communicate with the SOS server in such situations.
 
@@ -16,7 +16,7 @@ So we designed a more generalized way of handling the system calls, which has pa
 Interprocess Communication
 --------------------------
 
-We implemented :abbr:`IPC (interprocess communication)` to use shared memory for transmitting the bigger chunks of data like strings and buffers in general, but used the L4 message registers to send anything which is small enough to fit in a single register (i.e. 4 byte words). For shared memory each user process has one page mapped with caching disabled [#f1]_ at a fixed virtual address. Before sending a message to the server, the user process can copy data into that page. Then upon recieving a message, the server does an address lookup in the user process' page table to acquire access to the frame corresponding to the user process' :abbr:`IPC (interprocess communication)` page. The server can read the data, processes the request and write a result back into the frame. Then he sends a :abbr:`IPC (interprocess communication)` reply to wake up the user thread which is able to read the result data in its own address space again.
+We implemented :abbr:`IPC (interprocess communication)` to use shared memory for transmitting the bigger chunks of data like strings and buffers in general, but used the L4 message registers to send anything which is small enough to fit in a single register (i.e. 4 byte words). For shared memory each user process has one page mapped with caching disabled [#f1]_ at a fixed virtual address. Before sending a message to the server, the user process can copy data into that page. Then upon recieving a message, the server does an address lookup in the user process' page table to acquire access to the frame corresponding to the user process' :abbr:`IPC (interprocess communication)` page. The server can read the data, processes the request and writes a result back into the frame. Then he sends a :abbr:`IPC (interprocess communication)` reply to wake up the user thread which is able to read the result data in its own address space again.
 
 .. rubric:: Footnotes
 
@@ -24,8 +24,8 @@ We implemented :abbr:`IPC (interprocess communication)` to use shared memory for
 
 .. _syscalls:
 
-Syscall Numbers
----------------
+System Call Numbers
+-------------------
 
 The identifiers for all the system calls we implemented are defined in a header file ``syscalls.h``, that is included in both the SOS server and the libsos library. It defines the following system calls:
 
@@ -50,7 +50,7 @@ SOS_TIMESTAMP        Get uptime of the system
 SOS_UNMAP_ALL        Unmap all memory pages (for debugging)
 ==================== ==========================================================
 
-.. note:: This header file resides in src/libs/sos_shared, a library which only contains structs, defines, typedefs and some macros but is accessable on both sides - the SOS server and user processes.
+.. note:: This header file resides in :file:`src/libs/sos_shared`, a library which only contains structs, defines, typedefs and some macros but is accessable on both sides - the SOS server and user processes.
 
 
 Server
@@ -64,7 +64,7 @@ The handler functions have the following signature::
 
 Inputs are the thread ID of the sender (a user process), the :abbr:`IPC (interprocess communication)` message recieved from that process and a physical memory address pointing to the user threads dedicated :abbr:`IPC (interprocess communication)` page (see :ref:`ipc`). The return value is an integer that specifies if the system call loop is supposed to immediately send a reply message (which has to be loaded into the message registers by the handler function before) to the user thread (return is 1) or not (return is 0). This is done to be able to use L4s special :abbr:`IPC (interprocess communication)` speedup function ``L4_ReplyWait``.
 
-.. important:: If a system call handler function does not immediately reply to the user thread (usually because the server has to wait for a callback to return) we need to make sure to reply in the callback function itself since the user thread will wait until it receives a message.
+.. important:: If a system call handler function does not immediately reply to the user thread (usually because the server has to wait for a callback to return) we need to make sure to reply in the callback function itself, otherwise the user thread will wait until it receives a reply  message forever.
 
 A handler function can be registered in the function table by calling ::
 
@@ -94,7 +94,7 @@ The libsos library consists of functions that nicely wrap up the different syste
    :lines: 10-37
 
 
-.. warning:: Special care has to be taken if you use ``printf()`` as a debugging method in system calls. Since ``printf()`` uses our write syscall internally it will at least destroy your data in the shared page and most likely lead to weird result data in your L4 message.
+.. warning:: Special care has to be taken if you use ``printf()`` as a debugging method in system calls. Since ``printf()`` uses our write system call internally it will at least destroy your data in the shared page and most likely lead to weird result data in your L4 message.
 
 
 Interface Changes
@@ -104,18 +104,18 @@ We tried to keep changes in the given interface description as little as possibl
 
 #. The ``time_stamp()`` call returns ``uint_64`` (8 byte) instead of ``long`` (4 byte). Since we store the time stamp in the SOS server already as a 8 byte value we did not see much point in removing the upper 4 bytes here.
 #. ``process_wait()`` returns -1 if a invalid pid is specified.
-#. ``process_create()`` we made this call a bit more specific in case an error occurs. Basically it will return a value less than zero in case of an error. The exact error types are defined in `process_shared.h:6`. We also do busy waiting here in case the process table is full.
+#. ``process_create()`` we made this call a bit more specific in case an error occurs. Basically it will return a value less than zero in case of an error. The exact error types are defined in :file:`process_shared.h:6`. We also do busy waiting here in case the process table is full.
 
-In addition to these changes we introduced some new syscalls ``process_start()`` and ``process_get_name()``. However they are not very useful for user processes since they can only be used by the initializer (see :ref:`process-creation` for a more detailed explanation).
+In addition to these changes we introduced some new system calls ``process_start()`` and ``process_get_name()``. However they are not very useful for user processes since they can only be used by the initializer (see :ref:`process-creation` for a more detailed explanation).
 
 
 Known Limitations
 -----------------
 
-The read and write syscalls are not guaranteed to work properly in case the nbyte parameter is larger than 512 bytes. This is because of limitations in the :abbr:`NFS (Network File System)` library which does not split packets.
+The read and write system calls are not guaranteed to work properly in case the parameter ``nbyte`` is larger than 512 bytes. This is because of limitations in the :abbr:`NFS (Network File System)` library which does not split packets.
 
 
 Testing
------------------
+-------
 
-We did blackbox testing of all the syscalls. The test program is located at :file:`src/tests/syscalls`.
+We did blackbox testing of all the system calls. The test program is located at :file:`src/tests/syscalls`.
