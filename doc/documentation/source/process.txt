@@ -5,19 +5,19 @@ Process
 
 Process Table
 ----------------
-We use a hash table of fixed size to store our process descriptor (see process.h:13 type `process`).
+We use a hash table of fixed size to store our process descriptor (see process.h:13 type ``process``).
 This means that we limit the number of concurrently running processes to the size
 of this table (which at the moment is 128). If one requires a higher amount here
-he can adjust the value `MAX_RUNNING_PROCESS` in process.h:29. However since the key to find
+he can adjust the value ``MAX_RUNNING_PROCESS`` in process.h:29. However since the key to find
 a process in the table is the corresponding L4 thread ID it also requires careful
-adjustment of the `tid2pid` helper function.
+adjustment of the ``tid2pid()`` helper function.
 
 .. _process-creation:
 
 Process Creation
 ----------------
 For process creation we tried to "cheat" a little bit to make it a lot simpler: In a normal system the SOS Server would probably be responsible for loading
-the file from the NFS file system, parse the elf binary and map the contents to the correct pages. However because in L4 the unit of protection is the address space and you can control what and when you run something in that address space we first create a new address space and run an initializer program in it. The initializer appears as a (more privileged) user process in the server and resides within the boot image. This means to read the ELF binary we can reuse our file system calls. To set up the pages containing the data and text section of the binary we are also able to use the `elf_loadFile()` function which copies the contents into the correct offsets using memcpy. This means that all the copying to the uninitialized memory regions is handled by our pager which allocates the frames and sets up the page table correctly. When `elf_loadFile()` is finished we can just tell the thread to stop and restart it by setting the instruction pointer to our process entry point. On downside of this approach is that pages containing code are not linked to the original binary and get swapped out in the swap file. However this is only a performance issue and does not affect the functioning of the system in general. The described behaviour is also shown in the diagram below (see :ref:`process-start-sequence`).
+the file from the NFS file system, parse the elf binary and map the contents to the correct pages. However because in L4 the unit of protection is the address space - and you can control what and when you run something in that address space - we first create a new address space and run an initializer program in it. The initializer appears as a (more privileged) user process in the server and resides within the boot image. This means to read the ELF binary we can reuse our file system calls. To set up the pages containing the data and text section of the binary we are also able to use the ``elf_loadFile()`` function which copies the contents at the correct offsets using ``memcpy()``. This means that all the copying to the uninitialized memory regions is handled through the pager who allocates the frames and sets up the page table correctly. When ``elf_loadFile()`` finishes we just tell the thread to stop and restart it by setting the instruction pointer to our process entry point. The downside of this approach is that pages containing code are not linked to the original binary and get swapped out in the swap file. However this is only a performance issue and does not affect the functioning of the system in general. The described sequence is also shown in the diagram below (see :ref:`process-start-sequence`).
 
 .. _process-start-sequence:
 
@@ -32,7 +32,7 @@ the file from the NFS file system, parse the elf binary and map the contents to 
 
 Process Deletion
 ----------------
-Process deletion basically just stops the thread using `L4_Stop()`, cleans the mappings in the hardware page table and frees datastructures belonging to this process in the SOS server. However the biggest problem here is that a process could be killed while waiting for a syscall to return and the SOS server would not detect that the process is deleted and try to reply. Since our server is single threaded and `process_delete()` is also a syscall this can only happen whenever we have a syscall which does not immediately (i.e. not in the same loop iteration) return back to the client.
+Process deletion basically just stops the thread using `L4_Stop()`, cleans the mappings in the hardware page table and frees data structures belonging to this process in the SOS server. However the biggest problem here is that a process could be deleted while waiting for a syscall to return and the SOS server would not detect that the process is deleted and try to reply. Since our server is single threaded and `process_delete()` is also a syscall this can only happen whenever we have a syscall which does not immediately (i.e. not in the same loop iteration) return back to the client.
 
 With our implementation this is the case in the following situations:
 
@@ -40,6 +40,7 @@ With our implementation this is the case in the following situations:
 #. Reading and Writing to a file on the NFS file system
 #. Waiting for a process to finish (`process_wait()`)
 #. Swapping Pages in and out of physical memory
+#. Sleeping
 
-For the third case the fix is pretty easy since the ID on which a thread waits is stored in the process descriptor so removing the process from the process table would already make sure that we don't call back anymore. In all the other cases we call back to the process in the callback function invoked by the NFS library. So the solution for all those cases look similar. The NFS library allows you to define a token (a 4 byte word) which is passed back to you as an argument to the callback function. For example in swap in and swap out we pass on the corresponding `page_queue_item` address. Now all we have to do on process deletion is to identify which pages are currently being swapped out/in (this is why we have a queue containing all the swapping page items) and mark them so we can detect that the corresponding process was actually deleted and act appropriately.
+For the third case the fix is pretty easy since the ID on which a thread waits is stored in the process descriptor so removing the process from the process table would already make sure that we don't call back anymore. Sleep timers are easily removed by walking through the priority queue of all currently registered timers. In all the other cases we call back to the process in the callback function invoked by the NFS library. So the solution for all those cases look similar. The NFS library allows you to define a token (a 4 byte word) which is passed back to you as an argument to the callback function. For example in swap in and swap out we pass on the corresponding `page_queue_item` address. Now all we have to do on process deletion is to identify which pages are currently being swapped out/in (this is why we have a queue containing all the swapping page items) and mark them so we can detect that the corresponding process was actually deleted and act appropriately.
 
