@@ -94,13 +94,13 @@ The libsos library consists of functions that nicely wrap up the different syste
    :lines: 10-37
 
 
-.. warning:: Special care has to be taken to use ``printf()`` as a debugging method in system calls. Since ``printf()`` uses our write syscall internally it will at least destroy your data in the shared page and most likely lead to weird result data in your L4 message.
+.. warning:: Special care has to be taken if you use ``printf()`` as a debugging method in system calls. Since ``printf()`` uses our write syscall internally it will at least destroy your data in the shared page and most likely lead to weird result data in your L4 message.
 
 
 Interface Changes
 -----------------
 
-We tried to keep changes to the given standard as little as possible and made only three small changes in the behaviour of the system calls during the project:
+We tried to keep changes in the given interface description as little as possible and made only three small changes in the behaviour of the system calls during the project:
 
 #. The ``time_stamp()`` call returns ``uint_64`` (8 byte) instead of ``long`` (4 byte). Since we store the time stamp in the SOS server already as a 8 byte value we did not see much point in removing the upper 4 bytes here.
 #. ``process_wait()`` returns -1 if a invalid pid is specified.
