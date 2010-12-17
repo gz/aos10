@@ -16,7 +16,7 @@ adjustment of the ``tid2pid()`` helper function.
 
 Process Creation
 ----------------
-For process creation we tried to "cheat" a little bit to make it a lot simpler: In a normal system the SOS Server would probably be responsible for loading
+For process creation we tried to "cheat" a little bit to make it a lot simpler: In a normal system the SOS server would probably be responsible for loading
 the file from the NFS file system, parse the elf binary and map the contents to the correct pages. However because in L4 the unit of protection is the address space - and you can control what and when you run something in that address space - we first create a new address space and run an initializer program in it. The initializer appears as a (more privileged) user process in the server and resides within the boot image. This means to read the ELF binary we can reuse our file system calls. To set up the pages containing the data and text section of the binary we are also able to use the ``elf_loadFile()`` function which copies the contents at the correct offsets using ``memcpy()``. This means that all the copying to the uninitialized memory regions is handled through the pager who allocates the frames and sets up the page table correctly. When ``elf_loadFile()`` finishes we just tell the thread to stop and restart it by setting the instruction pointer to our process entry point. The downside of this approach is that pages containing code are not linked to the original binary and get swapped out in the swap file. However this is only a performance issue and does not affect the functioning of the system in general. The described sequence is also shown in the diagram below (see :ref:`process-start-sequence`).
 
 .. _process-start-sequence:

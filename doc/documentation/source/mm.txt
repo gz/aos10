@@ -37,7 +37,7 @@ this is more than enough).
 We decided to use a 2 level page table using the top 12 bits
 of an address as an index in the page directory (1st level) and the following 8 bits
 as an index in the second level page table. All page tables are stored in the heap
-memory of the SOS Server (which we set up to use a reserved region of 5 MB in
+memory of the SOS server (which we set up to use a reserved region of 5 MB in
 physical memory). This approach favors simplicity but it probably would have been
 wise to use physical frames for better scalability with multiple concurrent
 processes.

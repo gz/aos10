@@ -11,7 +11,7 @@ File System
 To understand the Serial IO and :abbr:`NFS (Network File System)` parts, we need to explain the design of our file system first. Not only the real files that we can access over the :abbr:`NFS (Network File System)`, but also the "Console", the only way a user can interact with our system, is modeled as a file residing in our file system. If a user program wants to write to the console or read from it, it simply opens the file called "console" like any other file and performs normal file writing/reading operations on it (see :ref:`serial-io` for details).
 
 Server side implementation
-^^^^^^^^^^^^^^^^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 File system related code resides in the :file:`src/sos/io` directory. Our file system has no support for directories and can only handle a limited number of files (limited to ``DIR_CACHE_SIZE`` defined in :file:`io.h:32`). We maintain a file cache (a static array called ``file_cache``) that allows ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system uses NFS to find files in a specific directory of the connected host and creates a ``file_info`` entry in the file_cache for each file found. The system is not able to detect changes to files on the host or new added files, unless they are created by our own file system of course.
 
