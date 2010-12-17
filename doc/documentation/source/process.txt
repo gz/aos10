@@ -22,7 +22,7 @@ the file from the NFS file system, parse the elf binary and map the contents to 
 .. _process-start-sequence:
 
 .. figure:: _images/process_start.png
-    :scale: 100%
+    :scale: 110%
     :alt: Sequence Diagram: Creating a process
 
     Creating a new process
@@ -37,7 +37,7 @@ Process deletion basically just stops the thread using `L4_Stop()`, cleans the m
 With our implementation this is the case in the following situations:
 
 #. Creating a file on the NFS file system
-#. Reading and Writing to a file on the NFS file system
+#. Reading and Writing to a file
 #. Waiting for a process to finish (`process_wait()`)
 #. Swapping Pages in and out of physical memory
 #. Sleeping

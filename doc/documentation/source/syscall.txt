@@ -118,4 +118,4 @@ The read and write syscalls are not guaranteed to work properly in case the nbyt
 Testing
 -----------------
 
-We did blackbox testing of all the syscalls. The test program is located in :file:`src/tests/syscalls`.
+We did blackbox testing of all the syscalls. The test program is located at :file:`src/tests/syscalls`.
