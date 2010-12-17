@@ -13,10 +13,3 @@ Contents:
    clock.txt
    process.txt
 
-Indices and tables
-==================
-
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
-

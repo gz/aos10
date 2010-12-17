@@ -32,5 +32,3 @@ The sleep system call basically uses the function ``register_timer`` of the cloc
 
 Additionally, we have the functions ``remove_timers`` and ``stop_timer``. The first one is used at process deletion time, it basically walks through the timer queue and deletes all timer entries that belong to the deleted process. It also restarts the timer if the pending timer queue head belonged to the deleted process. The second function stops all timers and deletes all entries from the timer queue.
 
-Benchmark Program
------------------
