@@ -3,119 +3,46 @@
 IO Subsystem
 ============
 
-The Input Output Subsystem is the reason for the existence of the system call interface described in the last chapter. To avoid concurrency problems at accessing the hardware devices of the system, only the L4 kernel and the SOS server are allowed to do so. Of course the SOS server has to provide controlled access to the user processes, to enable them to do useful things. This chapter and the next chapter called :ref:`clock-driver` describe all the system calls we implemented that are connected to accessing the hardware of the system.
+The Input Output Subsystem uses a NFS library to access files over the network and a serial library to support a console.
 
 File System
 -----------
 
 To understand the Serial IO and :abbr:`NFS (Network File System)` parts, we need to explain the design of our file system first. Not only the real files that we can access over the :abbr:`NFS (Network File System)`, but also the "Console", the only way a user can interact with our system, is modeled as a file residing in our file system. If a user program wants to write to the console or read from it, it simply opens the file called "console" like any other file and performs normal file writing/reading operations on it (see :ref:`serial-io` for details).
 
-SOS server parts
-^^^^^^^^^^^^^^^^
+Server side implementation
+^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The main part of the file system is defined in the :file:`src/sos/io` directory. The files :file:`io.h` and :file:`io.c` define the data structures that the file system is based upon. Our file system supports only one directory and a limited number of files (``DIR_CACHE_SIZE``). We maintain a file cache (a static array called ``file_cache``) that has ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system reads the root directory of the connected tftp host and creates a ``file_info`` for each file found. The system will not be able to access new files in the tftp root directory without restarting, unless they are created by our own file system of course.
+File system related code resides in the :file:`src/sos/io` directory. Our file system has no support for directories and can only handle a limited number of files (limited to ``DIR_CACHE_SIZE`` defined in :file:`io.h:32`). We maintain a file cache (a static array called ``file_cache``) that allows ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system uses NFS to find files in a specific directory of the connected host and creates a ``file_info`` entry in the file_cache for each file found. The system is not able to detect changes to files on the host or new added files, unless they are created by our own file system of course.
 
-The ``file_info`` structure contains the following information:
+If we take a closer look at the ``file_info`` type (see :file:`io.h:14`) we can see that we store function pointers for all the file operations here. This allows us to be able to specify a different behaviour for every file. We use this form of dynamic dispatching to figure out at runtime (based on the file) if the serial I/O functions should be invoked or rather the ones that deal with NFS.
 
-* ``char filename[MAX_PATH_LENGTH]``, a buffer for the name of the file.
+The second data structure defined in :file:`io.h:36` is a structure called ``file_table_entry``. It is used to hold information about files which are currently opened by a process. Each user process has its own file table in the process descriptor. It contains pointers to the type ``file_table_entry``. If a file is created/opened, one of these structure is allocated and stored in the file table.
 
-* ``stat_t status``, the file status (access rights, size, creation time, ...).
-
-* ``L4_Bool_t creation_pending``, a flag that tells us, if there is a callback for this files creation pending. This is needed if the process that has created the file is being deleted between creation call and callback, so that the callback function knows if it has to wake up the process or not (a dead process cannot be woken).
-
-* ``L4_ThreadId_t reader``, thread ID of the thread that has exclusive read access. This is needed only for the special "console" file (see :ref:`serial-io` for details).
-
-* ``struct serial* serial_handle``, serial handler, also only used for the special "console" file.
-
-* ``circular_buffer* cbuffer``, circular buffer, only used for the special "console" file.
-
-* ``struct cookie nfs_handle``, handle used by :abbr:`NFS (Network File System)` to identify the file.
-
-* ``void (*open)  (struct finfo*, L4_ThreadId_t, fmode_t )``, function pointer to the file open function appropriate for this file.
-
-* ``void (*write) (struct fentry*)``, function pointer to the file write function appropriate for this file.
-
-* ``void (*read)  (struct fentry*)``, function pointer to the file read function appropriate for this file.
-
-* ``void (*close) (struct fentry*)``, function pointer to the file close function appropriate for this file.
-
-Because we save all the file operation functions as function pointers in the ``file_info`` structure for each file, we are able to define special files that have a particular behavior. This is only used for the so called "console" file at the moment, but could of course be used for any other functionality that can be accessed in the way one accesses a file. One simply defines the four file operation functions and links them into the respective ``file_info`` structure. See :ref:`serial-io` for details on the "console" file.
-
-The second data structure defined in :file:`io.h` is a structure called ``file_table_entry``. It is used to hold information about open files. Each user process in our system has its own file table which is initialized upon creation of the process. It contains entries of type ``file_table_entry``. If a file is created/opened, one of these structs is loaded and stored in the file table. The structure contains the following data:
-
-* ``file_info* file``, a pointer to the corresponding ``file_info``.
-
-* ``L4_ThreadId_t owner``, thread ID of the owner thread of this file table entry.
-
-* ``fmode_t mode``, mode in which the file was opened (read, write, read and write).
-
-* ``L4_Bool_t awaits_callback``, a flag that tells us, if there is any callback pending for this file. This is needed if the process that has invoked the operation on the file is being deleted between operation call and callback, so that the callback function knows if it has to wake up the process or not (a dead process cannot be woken).
-
-* ``data_ptr client_buffer``, a pointer to a user space memory location where we should write the data coming back from file reading.
-
-* ``L4_Word_t to_read``, the number of bytes to read (set by syscall ``read()``).
-
-* ``L4_Word_t to_write``, the number of bytes to write (set by syscall ``write()``).
-
-* ``L4_Word_t write_position``, the current write position in the file (used to handle multiple write calls).
-
-* ``L4_Word_t read_position``, the current read position in the file (used to handle multiple read calls).
-
-To enable the user processes to access the file system, there are system call handlers defined in :file:`io.c` for all the different file operations.
-
-Libsos library parts
-^^^^^^^^^^^^^^^^^^^^
-
-On the side of the user processes we have convenient functions that wrap all the system calls related to the file system. Their signatures are:
-
-* ``fildes_t open(const char *path, fmode_t mode);``
-
-  Opens a file with the provided path/name, in the provided mode (read/write/read and write). The modes are defined in the shared header :file:`io_shared.h`. The function returns the file descriptor of the open file. The file descriptor is also saved in the file table of the process.
-
-* ``int close(fildes_t file);``
-
-  Closes an already open file. Returns a success value (0 == success).
-
-* ``int read(fildes_t file, char *buf, size_t nbyte);``
-
-  Reads ``nbyte`` bytes from the ``file`` into the buffer ``buf``. The function returns the number of bytes that have actually been read.
-
-* ``int write(fildes_t file, const char *buf, size_t nbyte);``
-
-  Writes ``nbyte`` bytes from the buffer ``buf`` into the ``file``. The function returns the number of bytes that have actually been written.
-
-* ``int getdirent(int pos, char *name, size_t nbyte);``
-
-  Copies the name of the file at the position ``pos`` in the tftp root direcory into the buffer ``name``. A maximum of ``nbyte`` bytes are copied and the function returns the number of bytes that have actually been copied.
-
-* ``int stat(const char *path, stat_t *buf);``
-
-  Returns the status of the file ``path`` in the structure ``buf``.
-
+To enable user processes to access the file system, there are system call handlers defined in :file:`io.c` for all the different file operations. These function do some general checks before dispatching to the corresponding function in the ``file_info`` structure. The specialized handler functions are located in :file:`io_serial.c` and :file:`io_nfs.c` respectively.
 
 
 .. _serial-io:
 
-Serial IO
----------
+Serial I/O
+----------
 
-The serial input output system is a very important part of the system, because it ultimately enables the user to communicate with our system. Since the NSLU2 system does not have a display but a network adapter, it has to send its output over the network to an instance of net cat running on the host computer. This is also the way in which a program running on our system can get inputs from the user.
+The serial I/O system is a very important part of the system, because it ultimately enables the user to communicate with our system. Since the NSLU2 system does not have a display but only a network adapter, it has to send its output over the network to the host computer. This is also the way in which a program running on our system can get inputs from the user.
 
-Reading from and writing to this kind of "console" are modeled as normal file access operations, but on a specially designed, virtual file. At boot time, we initialize the first entry of the file cache to become that virtual file with the name "console", creation and access time 0, read- and writeable and so on (function ``io_init`` in :file:`io.c`). But most importantly we set it's file operation function pointers to different functions than we would for one of the "real" files. The four pointers are set to ``open_serial``, ``read_serial``, ``write_serial`` and ``close_serial``, which can all be found in the files :file:`io_serial.h` and :file:`io_serial.c`.
+Reading from and writing to this kind of "console" are modeled as normal file access operations, but on a specially designed, virtual file. At boot time, we initialize the first entry of the file cache to become that virtual file with the name "console", creation and access time 0, read- and writable and so on (``io_init()`` in :file:`io.c`). But most importantly we set its file operation function pointers to different functions than we would for one of the "real" files. The four pointers are set to ``open_serial()``, ``read_serial()``, ``write_serial()`` and ``close_serial()``, which can all be found in the file :file:`io_serial.c`.
 
-The function ``open_serial`` is different from its pendant ``open_nfs`` in the sense, that for the console we have to ensure that only one process at a time is allowed to open the "file" in read mode. The reason for this is that if we enter something into the console running on net cat, it is not reasonable to send this same input to several different processes. The ``close_serial`` function ensures, that the exclusive read right is reset correctly, so that at a later time another process can acquire it.
+The function ``open_serial()`` is different from its pendant ``open_nfs()`` in the sense, that for the console we have to ensure that only one process at a time is allowed to open the "file" in read mode. The reason for this is that if we enter something into the console, it is not reasonable to send the same input to several different processes. The ``close_serial()`` function ensures, that the exclusive read right is reset correctly, so that at a later time another process can acquire it.
 
-The function ``write_serial`` basically invokes the serial drivers ``serial_send`` function, that sends strings over the network to the net cat instance that is listening on port 26706. If sending fails, ``write_serial`` tries to resend the buffer 20 times before it is discarded.
+The function ``write_serial()`` basically invokes the serial drivers ``serial_send`` function, that sends strings over the network to the net cat instance that is listening on port 26706. If sending fails, ``write_serial()`` tries to resend the buffer 20 times before it is discarded.
 
-The function ``read_serial`` reads characters from the circular buffer in the file info structure of the console file. The circular buffer gets filled by the callback function ``serial_receive_handler`` which is registered to the serial driver in ``console_init`` which is called in ``io_init`` (line 194) on system boot time.
+The function ``read_serial()`` reads characters from the circular buffer in the file info structure of the console file. The circular buffer gets filled by the callback function ``serial_receive_handler()`` which is registered to the serial driver in ``console_init`` which is called in ``io_init()`` (line 194) on system boot time.
 
-Also, every process gets created already with a pre-initialized file descriptor 0 which has write capability for the console file. In milestone 0, we were supposed to implement the two user space functions ``sos_write`` and ``sos_read`` which are used by the framework to implement the C function ``printf``. Back then, these did just call the respective system calls, but now we replaced that code by other code that just performs the needed file operations on the console file.
+Every process gets created with a pre-initialized file descriptor 0 which has write capability for the console file. In milestone 0, we were supposed to implement the two user space functions ``sos_write()`` and ``sos_read()`` which are used by the C library for its I/O functions. Back then, they just called the respective system calls directly, but now we replaced that code so it just performs the needed file operations on the console file.
 
 
 Network File System
 -------------------
 
-The code for accessing the "real" files on the tftp server on the host PC over Ethernet is found in the files :file:`io_nfs.h` and :file:`io_nfs.c`. These files contain the handlers for read, write, open, getdirent and stat system calls specific to the :abbr:`NFS (Network File System)`. The usual behaviour is that the ``create_nfs``, ``read_nfs`` and ``write_nfs`` call the :abbr:`NFS (Network File System)` library function which then calls a given callback function in return. Usually we use the token value as a pointer to the file handle and store all the information about what we need to do on a callback in the file handle.
+The code for accessing the real files over NFS on the host PC is found in the file :file:`io_nfs.c`. It contains the handlers for read, write, open, getdirent and stat system calls specific to the :abbr:`NFS (Network File System)`. The usual behaviour is that the ``create_nfs()``, ``read_nfs()`` and ``write_nfs()`` call the :abbr:`NFS (Network File System)` library function which (after a reply has been received from the network) calls a supplied callback function in return. We use the token value as a pointer to the file handle and store all the information about what we need to do on a callback in the file handle.
 
-The only function that does not use a callback, which is registered to :abbr:`NFS (Network File System)`, is the ``open_nfs`` function. We don't need it because we already cache all the file information in the file cache array at boot time.
-
+Note that ``open_nfs()`` does reply immediately. We don't need to do a NFS call over network first because we already cache the NFS file handle in the file cache.
