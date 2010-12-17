@@ -32,7 +32,7 @@ the file from the NFS file system, parse the elf binary and map the contents to 
 
 Process Deletion
 ----------------
-Process deletion basically just stops the thread using `L4_Stop()`, cleans the mappings in the hardware page table and frees data structures belonging to this process in the SOS server. However the biggest problem here is that a process could be deleted while waiting for a syscall to return and the SOS server would not detect that the process is deleted and try to reply. Since our server is single threaded and `process_delete()` is also a syscall this can only happen whenever we have a syscall which does not immediately (i.e. not in the same loop iteration) return back to the client.
+Process deletion basically just stops the thread using ``L4_Stop()``, cleans the mappings in the hardware page table and frees data structures belonging to this process in the SOS server. However the biggest problem here is that a process could be deleted while waiting for a syscall to return and the SOS server would not detect that the process is deleted and try to reply. Since our server is single threaded and `process_delete()` is also a syscall this can only happen whenever we have a syscall which does not immediately (i.e. not in the same loop iteration) return back to the client.
 
 With our implementation this is the case in the following situations:
 
