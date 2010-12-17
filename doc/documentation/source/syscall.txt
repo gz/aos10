@@ -115,3 +115,7 @@ Known Limitations
 The read and write syscalls are not guaranteed to work properly in case the nbyte parameter is larger than 512 bytes. This is because of limitations in the NFS library which does not split packets.
 
 
+Testing
+-----------------
+
+We did blackbox testing of all the syscalls. The test program is located in :file:`src/tests/syscalls`.
