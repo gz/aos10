@@ -17,11 +17,10 @@ the project would evolve.
   processes communicate with the SOS server.
 
 * Chapter :ref:`io-subsystem` explains the code responsible for 
-  reading and writing files on the NFS server as well as reading and writing 
+  reading and writing files on the :abbr:`NFS (Network File System)` server as well as reading and writing 
   from and to the serial port.
 
-* Chapter :ref:`clock-driver` describes the driver code to access the CPU clock timer
-  and also the benchmark program to test the speed of the file system.
+* Chapter :ref:`clock-driver` describes the driver code to access the CPU clock timer.
 
 * Chapter :ref:`process` contains information about how we manage
   user processes in the root server.

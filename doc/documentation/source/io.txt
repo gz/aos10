@@ -3,7 +3,7 @@
 IO Subsystem
 ============
 
-The Input Output Subsystem uses a NFS library to access files over the network and a serial library to support a console.
+The Input Output Subsystem uses a :abbr:`NFS (Network File System)` library to access files over the network and a serial library to support a console.
 
 File System
 -----------
@@ -13,9 +13,9 @@ To understand the Serial IO and :abbr:`NFS (Network File System)` parts, we need
 Server side implementation
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-File system related code resides in the :file:`src/sos/io` directory. Our file system has no support for directories and can only handle a limited number of files (limited to ``DIR_CACHE_SIZE`` defined in :file:`io.h:32`). We maintain a file cache (a static array called ``file_cache``) that allows ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system uses NFS to find files in a specific directory of the connected host and creates a ``file_info`` entry in the file_cache for each file found. The system is not able to detect changes to files on the host or new added files, unless they are created by our own file system of course.
+File system related code resides in the :file:`src/sos/io` directory. Our file system has no support for directories and can only handle a limited number of files (limited to ``DIR_CACHE_SIZE`` defined in :file:`io.h:32`). We maintain a file cache (a static array called ``file_cache``) that allows ``DIR_CACHE_SIZE`` possible entries of type ``file_info``. At boot time, the system uses :abbr:`NFS (Network File System)` to find files in a specific directory of the connected host and creates a ``file_info`` entry in the file_cache for each file found. The system is not able to detect changes to files on the host or new added files, unless they are created by our own file system of course.
 
-If we take a closer look at the ``file_info`` type (see :file:`io.h:14`) we can see that we store function pointers for all the file operations here. This allows us to be able to specify a different behaviour for every file. We use this form of dynamic dispatching to figure out at runtime (based on the file) if the serial I/O functions should be invoked or rather the ones that deal with NFS.
+If we take a closer look at the ``file_info`` type (see :file:`io.h:14`) we can see that we store function pointers for all the file operations here. This allows us to be able to specify a different behaviour for every file. We use this form of dynamic dispatching to figure out at runtime (based on the file) if the serial I/O functions should be invoked or rather the ones that deal with :abbr:`NFS (Network File System)`.
 
 The second data structure defined in :file:`io.h:36` is a structure called ``file_table_entry``. It is used to hold information about files which are currently opened by a process. Each user process has its own file table in the process descriptor. It contains pointers to the type ``file_table_entry``. If a file is created/opened, one of these structure is allocated and stored in the file table.
 
@@ -43,7 +43,7 @@ Every process gets created with a pre-initialized file descriptor 0 which has wr
 Network File System
 -------------------
 
-The code for accessing the real files over NFS on the host PC is found in the file :file:`io_nfs.c`. It contains the handlers for read, write, open, getdirent and stat system calls specific to the :abbr:`NFS (Network File System)`. The usual behaviour is that the ``create_nfs()``, ``read_nfs()`` and ``write_nfs()`` call the :abbr:`NFS (Network File System)` library function which (after a reply has been received from the network) calls a supplied callback function in return. We use the token value as a pointer to the file handle and store all the information about what we need to do on a callback in the file handle.
+The code for accessing the real files over :abbr:`NFS (Network File System)` on the host PC is found in the file :file:`io_nfs.c`. It contains the handlers for read, write, open, getdirent and stat system calls specific to the :abbr:`NFS (Network File System)`. The usual behaviour is that the ``create_nfs()``, ``read_nfs()`` and ``write_nfs()`` call the :abbr:`NFS (Network File System)` library function which (after a reply has been received from the network) calls a supplied callback function in return. We use the token value as a pointer to the file handle and store all the information about what we need to do on a callback in the file handle.
 
 Note that ``open_nfs()`` does reply immediately. We don't need to do a NFS call over network first because we already cache the NFS file handle in the file cache.
 

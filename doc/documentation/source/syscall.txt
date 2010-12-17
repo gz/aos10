@@ -56,7 +56,7 @@ SOS_UNMAP_ALL        Unmap all memory pages (for debugging)
 Server
 ------
 
-In the SOS server, we have created a function table that maps each of these constants to an actual handler function. The switch statement in the system call loop can then do a lookup in this table based on the IPC label it receives.
+In the SOS server, we have created a function table that maps each of these constants to an actual handler function. The switch statement in the system call loop can then do a lookup in this table based on the :abbr:`IPC (interprocess communication)` label it receives.
 
 The handler functions have the following signature::
 
@@ -112,7 +112,7 @@ In addition to these changes we introduced some new syscalls ``process_start()``
 Known Limitations
 -----------------
 
-The read and write syscalls are not guaranteed to work properly in case the nbyte parameter is larger than 512 bytes. This is because of limitations in the NFS library which does not split packets.
+The read and write syscalls are not guaranteed to work properly in case the nbyte parameter is larger than 512 bytes. This is because of limitations in the :abbr:`NFS (Network File System)` library which does not split packets.
 
 
 Testing

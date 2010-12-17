@@ -2,14 +2,15 @@
 
 Memory Management
 =================
-Memory management related code resides within the src/sos/mm/ directory. It consists of
+
+Memory management related code resides within the :file:`src/sos/mm/` directory. It consists of
 three parts:
 
 #. Frame Management
 #. Pager (handles process page faults)
 #. Swapping (swaps pages in and out of physical memory)
 
-.. hint:: To test the Swapping it is recommended to reduce the number of physical frames artificially. This can be done by uncommenting `SWAP_TEST` (frames.c:25). The amount of frames is then defined through `SWAP_FRAMES_LIMIT` (frames.c:30).
+.. hint:: To test the Swapping it is recommended to reduce the number of physical frames artificially. This can be done by uncommenting ``SWAP_TEST`` (:file:`frames.c:25`). The amount of frames is then defined through ``SWAP_FRAMES_LIMIT`` (:file:`frames.c:30`).
 
 
 
@@ -20,11 +21,11 @@ The address space for a process is set up according to the following diagram:
 .. image:: _images/address_space.png
     :width: 110%
 
-You may notice that everything below 0x02000000 is not accessible. The reason for
+You may notice that everything below ``0x02000000`` is not accessible. The reason for
 this is that loading of an ELF binary and copying text and data sections
 is done by a privileged piece of code running in the same address space 
 but with the capability to access physical memory directly 
-(i.e. everything below 0x02000000). For more information refer to the 
+(i.e. everything below ``0x02000000``). For more information refer to the 
 :ref:`process-creation` chapter.
 
 
@@ -55,7 +56,7 @@ is not swapped and there exists no mapping in the software or hardware page tabl
 for it). As we can see, once the system needs to swap out we select a page 
 based on the second chance algorithm. We implemented second chance using a queue
 where we keep all the pages currently associated with a physical frame.
-Notice that in the diagrams the entities Pager, Swapper and NFS handler are not
+Notice that in the diagrams the entities Pager, Swapper and :abbr:`NFS (Network File System)` handler are not
 separate processes but rather refer to functions located in different code files.
 To give a better overview we decided to split it up anyways even though all 
 of these functions are called in the SOS syscall loop.
@@ -68,17 +69,17 @@ of these functions are called in the SOS syscall loop.
 
     Access a page for the first time
 
-If one takes a look at the structure ``page_queue_item`` (swapper.h:9)
+If one takes a look at the structure ``page_queue_item`` (:file:`swapper.h:9`)
 he will notice that we store a bunch of information there to help
 us identify to which process a page belongs to, find the correct swap offset 
 and corresponding page table entry. 
 While a page is swapped out it's corresponding ``page_queue_item`` is
 inserted in the swapping queue. This is needed because swapping in and out 
-leads to an asynchronous NFS callback in the server so in case a process 
+leads to an asynchronous :abbr:`NFS (Network File System)` callback in the server so in case a process 
 is deleted while it's waiting for a page fault we need to be able to detect this
 in the callback (see also :ref:`process-deletion`). The swap file stores only 
 page content and can currently hold about 5000 pages (although this can easily be
-changed by setting ``MAX_SWAP_ENTRIES`` in swapper.c:64). The offset of a page in the swap file
+changed by setting ``MAX_SWAP_ENTRIES`` in :file:`swapper.c:64`). The offset of a page in the swap file
 is stored in the page table entry during the time a page is swapped out 
 and once it is back in memory gets copied into the corresponding
 ``page_queue_item``.
@@ -98,7 +99,7 @@ exist in the hardware page table.
 As we can see we have to distinguish two cases:
 
 #. If the page is currently in the swap file we need to read it back into physical memory. Notice also that we create the corresponding ``page_queue_item`` before we called ``nfs_read()`` so we can pass its address as an argument which is handed back later in the callback.
-#. If the page is already in physical memory we just update the hardware page table using `L4_MapFpage()`.
+#. If the page is already in physical memory we just update the hardware page table using ``L4_MapFpage()``.
 
 Now that we've seen the sequence patterns used to handle page faults we will take a closer look at the states a page can be in and how they affect our
 data structures (see :ref:`page-state`).
