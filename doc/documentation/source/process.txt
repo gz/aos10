@@ -5,10 +5,10 @@ Process
 
 Process Table
 ----------------
-We use a hash table of fixed size to store our process descriptor (see process.h:13 type ``process``).
+We use a hash table of fixed size to store our process descriptor (see :file:`process.h:13` type ``process``).
 This means that we limit the number of concurrently running processes to the size
 of this table (which at the moment is 128). If one requires a higher amount here
-he can adjust the value ``MAX_RUNNING_PROCESS`` in process.h:29. However since the key to find
+he can adjust the value ``MAX_RUNNING_PROCESS`` in :file:`process.h:29`. However since the key to find
 a process in the table is the corresponding L4 thread ID it also requires careful
 adjustment of the ``tid2pid()`` helper function.
 
