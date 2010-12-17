@@ -3,8 +3,34 @@
 Clock Driver
 ============
 
+For milestone 5, we were supposed to create a driver for the IXP42X timer. The driver should have enabled printing of the the system uptime and running sleep timers. With these tools we were then supposed to do some benchmarking on the performance of the :abbr:`NFS (Network File System)` functionality.
+
 Clock System Calls
 ------------------
+
+All the SOS server code associated with the clock driver is inside the two files :file:`clock.h` and :file:`clock.c`. On the user space side we just have two system call functions (``time_stamp`` and ``sleep``, implemented in :file:`sos.h` and :file:`syscall_timer.c`) and of course the whole benchmarking programm.
+
+For the time stamp measurement we use the time stamp timer register of the IXP42X hardware and for sleep calls we use the general purpose timer 0.
+
+The timer needs of course to be initialized before it can be used. We do that in the function ``start_timer`` which maps the memory region where the timer registers are in uncached mode, start the time stamp timer register and enable the interrupts for our time stamp timer and the general purpose timer 0.
+
+The timer interrupts are detected in the system call loop in :file:`main.c`.
+
+Time Stamp
+^^^^^^^^^^
+
+The timestamp timer will give an interrupt whenever its 32 bit value overflows. The interrupt recieved in the system call loop then comes from thread number ``NSLU2_TIMESTAMP_IRQ``. The system call loop calls the handler function ``timer_overflow_irq`` which increments our internal high word of the time stamp value and resets the timestamp timer (the low word needs to restart counting).
+
+The system call handler function for the time stamp retrieval function is called ``send_timestamp``. It calls the internal function ``get_time_stamp`` which returns a 64 bit integer assembled from the high word value in :file:`clock.c` and the lower word read from the actual hardware timer. To send this number with :abbr:`IPC (interprocess communication)` message registers we split it up into two 32 bit integers that are assembled back into the 64 bit integer in the user space function that did the system call.
+
+Sleep Timers
+^^^^^^^^^^^^
+
+The general purpose timer 0 is programmed to give an interrupt whenever it reaches zero (in the system call loop, the received interrupt then comes from thread number ``NSLU2_TIMER0_IRQ``). In that case ``timer0_irq`` is called as the interrupt handler, which removes the head of the timer queue and restarts the timer with the finish time of the next queue entry. ``timer0_irq`` of course also calls the handler function associated with that timer. At the moment this is always the function ``wakeup`` which just sends the :abbr:`IPC (interprocess communication)` reply to the sleeping user process to wake it up. But the way we implemented it, we could extend it easily.
+
+The sleep system call basically uses the function ``register_timer`` of the clock driver interface. ``register_timer`` will insert an ``alarm_timer`` structure into a priority queue and if the new timer has been inserted as the new queue head because it has a finishing time before the time of the old head of the queue, the timer is restarted with the new time.
+
+Additionally, we have the functions ``remove_timers`` and ``stop_timer``. The first one is used at process deletion time, it basically walks through the timer queue and deletes all timer entries that belong to the deleted process. It also restarts the timer if the pending timer queue head belonged to the deleted process. The second function stops all timers and deletes all entries from the timer queue.
 
 Benchmark Program
 -----------------
